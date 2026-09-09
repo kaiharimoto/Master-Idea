@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core (pure Dart)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No Flutter here on purpose, the same way Master Prompt keeps its core
+      # job free of it. mi_core carries the logic that has to be right when a
+      # run is five hours in and unattended, and it is kept analysable and
+      # testable in seconds without a 2.5 GB SDK. If this job ever needs
+      # Flutter, that property has been lost.
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: mi_core
+        working-directory: packages/mi_core
+        run: |
+          dart pub get
+          dart analyze
+          dart format --output=none --set-exit-if-changed .
+          dart test --reporter expanded
+
+  judgeset:
+    name: The judgeset is frozen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The ten critic prompts, the rating vocabularies and the deduction table
+      # are committed before the first review cycle and unchanged afterwards. A
+      # rubric whose deductions move between cycles cannot show progress, only
+      # motion. This job does nothing until the first cycle opens — the marker
+      # file below is written then — and fails loudly afterwards.
+      - name: Refuse a change to critics/ after cycle one has opened
+        run: |
+          if [ ! -f critics/.frozen-at ]; then
+            echo "No cycle has opened yet; critics/ is still being written."
+            exit 0
+          fi
+          FROZEN=$(cat critics/.frozen-at)
+          echo "judgeset frozen at $FROZEN"
+          if ! git diff --quiet "$FROZEN" HEAD -- critics/; then
+            echo "::error::critics/ changed after the judgeset was frozen."
+            git diff --stat "$FROZEN" HEAD -- critics/
+            exit 1
+          fi

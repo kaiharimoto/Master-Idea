@@ -1,0 +1,17 @@
+name: mi_engine
+description: Headless session driving for Master Idea — the on-disk session store, Claude CLI discovery and invocation, and the command-line entry point that runs a council session with no user interface at all. dart:io only, no Flutter.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  collection: ^1.19.0
+  meta: ^1.16.0
+  mi_core:
+    path: ../mi_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

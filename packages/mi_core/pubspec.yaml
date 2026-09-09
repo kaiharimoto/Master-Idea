@@ -1,0 +1,16 @@
+name: mi_core
+description: Domain core for Master Idea — the council, the session record, the three hard invariants and the pure renderers over a stored session. Pure Dart, no Flutter, no dart:io.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  collection: ^1.19.0
+  crypto: ^3.0.6
+  meta: ^1.16.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
