@@ -3,11 +3,14 @@
 Where the build actually is. Kept current as part of every change, because it
 is the only thing that tells the next session where we were.
 
-**Last updated:** first build session.
+**Last updated:** the session that built the engine and the headless spine, and
+joined the two halves of the pair.
 
 ## Done
 
-`packages/mi_core` — the engine, headless, analysed, formatted and green.
+`packages/mi_core` — the engine, and `packages/mi_engine` — the store, the
+Claude CLI transport and the headless entry point. Both analysed, formatted and
+green: 86 tests and 27.
 
 - **Families.** Ten council roles, twelve exploration angles, six rating
   dimensions with six closed ordinal vocabularies, four harness templates,
@@ -30,26 +33,57 @@ is the only thing that tells the next session where we were.
 - **The renderers** — dossier, coverage ledger, pitch — pure over the stored
   session, proven with a transport that throws if anything touches it.
 
-82 tests, all green: `cd packages/mi_core && dart test`.
+And the headless spine, driven as a person would drive it:
+
+```bash
+mi new    sessions/ interview.json     # the gate refuses a run without a licence
+mi run    sessions/ <id>               # deliberate to dryness through the CLI
+mi check  sessions/ [<id>]             # the invariant suite, exit code and all
+mi render sessions/ <id> dossier|ledger|pitch
+mi select sessions/ <id> d-0001 ...    # compute the integration, write the pitch
+```
+
+Every step of that is tested as a real subprocess, because a command whose exit
+code is wrong is a check that silently always passes. The council in those
+tests is a compiled fake binary that refuses what the real one refuses — a
+missing `--print`, an unknown flag, stream-json without `--verbose`, a stdin
+that never reaches EOF.
+
+## The seam to Master Prompt
+
+Done and tested from both sides. A finished session exports `pitch.md`; pasting
+it into Master Prompt's mission picker opens a mission there with the values
+proposed and the whole document kept as a received exchange. `IdeaPitch` lives
+in that program's `mp_core`, its fixtures are pitches this one actually
+produced, and decision 0011 records why the seam is a paste rather than a file
+or a protocol.
 
 ## Not started
 
 - **Both clients.** No Flutter work has begun. Neither is stubbed either —
   the rule that neither is a port of the other applies from the moment the
   first one starts.
-- **`mi_engine`.** The session store on disk, the Claude CLI locator and
-  transport, and the headless `mi` entry point. The directory layout the store
-  will write is settled (`sessions/<id>/interview/`, `rounds/`, `ratings/`,
-  `run_manifest.json`); nothing writes it yet.
+- **The interview itself.** The gate, the module bank and the composer exist and
+  are tested; what does not exist is the thing that *conducts* an interview —
+  putting a composed module to a person, reading what comes back, and producing
+  the restatement they approve. That is a client job, and it is the first thing
+  the clients need.
 - **The three reference sessions**, the evidence set, and the review cycles.
   All of them wait on the engine and the clients: every artifact must come from
   a session that actually ran.
 
 ## Next action
 
-Build `mi_engine`: the session store writing the settled directory layout, and
-the CLI transport implementing `CouncilTransport` the way Master Prompt invokes
-Claude Code — locator, capability probe, one conversation per seat.
+Start both clients at once, from the thin end-to-end spine the brief asks for:
+one smallest-tier session across all seven regions on Android and Windows
+together, unstyled, before any treatment is applied. `mi_design` first — the
+court-archive tokens, with the accent reachable only by a verdict block — then
+the seven regions against `MiDocument`, which both clients render rather than
+each deciding for itself what a verdict looks like.
+
+Neither client may be stubbed while the other is built. That is a failure
+condition in the brief, and it is also the only way parity survives contact
+with a deadline.
 
 ## Known gaps to watch
 

@@ -98,10 +98,10 @@ int _new(List<String> args) {
   }
 
   final String id = store.mintId();
-  final String title = interview.brief.restatement.split('.').first.trim();
+  final String title = SessionTitle.from(interview.brief.restatement);
   final Session session = Session(
     id: id,
-    taskId: _slug(title),
+    taskId: SessionTitle.slug(title),
     title: title,
     createdAt: DateTime.now().toUtc(),
     interview: interview,
@@ -302,12 +302,4 @@ int _list(List<String> args) {
 String? _option(List<String> args, String name) {
   final int i = args.indexOf(name);
   return i >= 0 && i + 1 < args.length ? args[i + 1] : null;
-}
-
-String _slug(String s) {
-  final String base = s
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-      .replaceAll(RegExp(r'^-+|-+$'), '');
-  return base.isEmpty ? 'session' : base;
 }

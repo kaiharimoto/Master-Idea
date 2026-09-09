@@ -123,4 +123,35 @@ void main() {
       expect(InterviewGate.canOpenRun(holed), isFalse);
     });
   });
+
+  group('naming a session', () {
+    test('is short enough to recognise in a list', () {
+      const String brief =
+          'An essay arguing that unattended machine work is only trustworthy '
+          'when its reasoning is auditable afterwards by someone who was not '
+          'there. It is aimed at people who already build with these tools.';
+      final String title = SessionTitle.from(brief);
+      expect(title.length, lessThanOrEqualTo(57));
+      expect(title, startsWith('An essay arguing'));
+      expect(
+        SessionTitle.slug(title).length,
+        lessThan(60),
+        reason:
+            'The slug becomes a directory name, and the first attempt made '
+            'one out of a whole sentence.',
+      );
+    });
+
+    test('leaves a short brief alone', () {
+      expect(
+        SessionTitle.from('A song about leaving.'),
+        'A song about leaving',
+      );
+    });
+
+    test('never returns nothing', () {
+      expect(SessionTitle.from('   '), 'Untitled session');
+      expect(SessionTitle.slug('!!!'), 'session');
+    });
+  });
 }

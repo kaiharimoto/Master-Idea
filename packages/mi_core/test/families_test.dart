@@ -156,15 +156,13 @@ void main() {
 
       for (final RatingVocabulary v in ratingVocabularies) {
         final String rungs = v.rungs.join(', ');
-        final String row =
-            '| `' + v.id + '` | ' + rungs + ' | ' + v.rejectAtOrBelow + ' |';
+        final String row = '| `${v.id}` | $rungs | ${v.rejectAtOrBelow} |';
         expect(
           text,
           contains(row),
           reason:
-              'critics/vocabularies.md does not carry ' +
-              v.id +
-              ' as the code defines it.',
+              'critics/vocabularies.md does not carry ${v.id} as the code '
+              'defines it.',
         );
       }
     });

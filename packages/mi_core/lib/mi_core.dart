@@ -31,3 +31,4 @@ export 'src/session/manifest.dart';
 export 'src/session/rating.dart';
 export 'src/session/round.dart';
 export 'src/session/session.dart';
+export 'src/session/session_title.dart';
