@@ -34,6 +34,27 @@ jobs:
           dart format --output=none --set-exit-if-changed .
           dart test --reporter expanded
 
+  engine:
+    name: Engine (pure Dart, dart:io)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      # Compiles and drives a fake `claude` binary that refuses what the real
+      # one refuses, so the transport, the argument composition and the whole
+      # headless spine are exercised without an API key.
+      - name: mi_engine
+        working-directory: packages/mi_engine
+        run: |
+          dart pub get
+          dart analyze
+          dart format --output=none --set-exit-if-changed .
+          dart test --reporter expanded
+
   judgeset:
     name: The judgeset is frozen
     runs-on: ubuntu-latest
