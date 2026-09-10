@@ -416,8 +416,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListenableBuilder(
                   listenable: _sitting,
                   builder: (BuildContext context, _) => Text(
-                    _sitting.isBusy ? 'in session' : '',
-                    style: MiType.caption.copyWith(color: c.inkMuted),
+                    // A turn waiting to be carried is the one thing on this
+                    // rail the client has to act on, and on a phone the rail
+                    // is a sheet they may have closed over it.
+                    _sitting.needsHand
+                        ? 'carry a turn'
+                        : _sitting.isBusy
+                        ? 'in session'
+                        : '',
+                    style: MiType.caption.copyWith(
+                      color: _sitting.needsHand ? c.ink : c.inkMuted,
+                    ),
                   ),
                 ),
             ],
