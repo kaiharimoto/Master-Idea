@@ -1,43 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:master_idea/src/app.dart';
 import 'package:master_idea/src/store/library.dart';
-import 'package:master_idea/src/update/release.dart';
-import 'package:master_idea/src/update/updater.dart';
 import 'package:mi_core/mi_core.dart';
 
-/// An updater that never reaches the network.
-///
-/// A widget test that let the real one run would depend on GitHub being up,
-/// which is the definition of a flaky test about an interface.
-class _Offline implements UpdateTransport {
-  @override
-  Future<Object?> fetch(Uri url) async => throw Exception('offline in tests');
+import 'offline_updater.dart';
 
-  @override
-  Future<void> download(
-    Uri url,
-    File target,
-    void Function(int received, int total) onProgress,
-  ) async {}
-
-  @override
-  Future<InstallOutcome> install(File file) async => InstallOutcome.manual;
-
-  @override
-  Future<Directory> workspace() async => throw Exception('offline in tests');
-}
-
-Widget app(Library library) => MasterIdeaApp(
-  library: library,
-  updater: Updater(
-    transport: _Offline(),
-    platform: UpdatePlatform.other,
-    currentBuild: 'local',
-  ),
-);
+Widget app(Library library) =>
+    MasterIdeaApp(library: library, updater: offlineUpdater());
 
 void main() {
   // Widget tests must not touch the filesystem: real writes cannot complete

@@ -81,9 +81,20 @@ zip alongside it.
   where every turn is carried by hand. Both are the same `CouncilTransport`, so
   both produce identical records.
 
-The APK was built and its signature verified against the committed key before
-any of this was pushed. The Windows installer can only be built on a Windows
-host, which is what the CI job on `windows-latest` is for.
+**Build 4 is published and installable**, at
+<https://github.com/kaiharimoto/Master-Idea/releases/tag/dev> — the APK, the
+Windows installer and the portable zip. The APK was built here and its
+certificate checked against the committed key before the first push; the
+installer can only be built on a Windows host, which is what the
+`windows-latest` job is for.
+
+The update path is verified as far as it can be without a device in hand:
+`published_release_test.dart` runs the real payload GitHub served for that
+release through the app's own reader and asserts it finds the APK on Android,
+prefers the installer over the zip on Windows, reads the build number out of
+the file name, and refuses to offer a build to itself. If the naming in the
+workflow and the patterns in the updater ever drift apart, an installed copy
+silently stops seeing updates forever — that test is what fails first.
 
 ## Not started
 - **The interview itself.** The gate, the module bank and the composer exist and

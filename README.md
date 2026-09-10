@@ -18,7 +18,7 @@ It works for any creative project — an essay, a story, a song, a program.
 
 Builds are published to the rolling
 [`dev` release](https://github.com/kaiharimoto/Master-Idea/releases/tag/dev) on
-every green push. The link never changes.
+every green push. The link never changes, so it is the one worth bookmarking.
 
 **Android** — download the `.apk` and open it. Android will ask once whether to
 allow installs from your browser. Later builds install straight over this one

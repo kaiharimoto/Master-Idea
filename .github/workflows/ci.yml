@@ -96,6 +96,16 @@ jobs:
           flutter analyze
           flutter test
 
+      # The version code has to rise with every build, or Android treats a new
+      # APK as the same version as the installed one — and while it will
+      # usually still install, nothing about "this is newer" is true from the
+      # system's point of view. Flutter takes it from pubspec's `version:`,
+      # so that is what gets stamped.
+      - name: Stamp the build number into the version
+        run: |
+          sed -i "s/^version: .*/version: 0.1.0+${{ github.run_number }}/" app/pubspec.yaml
+          grep '^version:' app/pubspec.yaml
+
       - name: Build release APK
         working-directory: app
         run: |

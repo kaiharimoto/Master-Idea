@@ -1,0 +1,20 @@
+{
+  "html_url": "https://github.com/kaiharimoto/Master-Idea/releases/tag/dev",
+  "assets": [
+    {
+      "name": "MasterIdea-4-bcf6312.apk",
+      "browser_download_url": "https://github.com/kaiharimoto/Master-Idea/releases/download/dev/MasterIdea-4-bcf6312.apk",
+      "size": 51561869
+    },
+    {
+      "name": "MasterIdea-windows-x64-4-bcf6312.zip",
+      "browser_download_url": "https://github.com/kaiharimoto/Master-Idea/releases/download/dev/MasterIdea-windows-x64-4-bcf6312.zip",
+      "size": 12485601
+    },
+    {
+      "name": "MasterIdeaSetup-4-bcf6312.exe",
+      "browser_download_url": "https://github.com/kaiharimoto/Master-Idea/releases/download/dev/MasterIdeaSetup-4-bcf6312.exe",
+      "size": 10787620
+    }
+  ]
+}
