@@ -123,7 +123,16 @@ class CouncilRun {
     final HarnessTemplate template = session.template;
     final DomainProfile profile = profileById(session.interview.profileId);
     int round = session.rounds.length + 1;
+    // Silence already on the record counts. Dryness is a property of the
+    // session — two consecutive rounds that returned nothing new — and not of
+    // one process's memory: a run resumed after an interruption that started
+    // counting from zero would search a round that had already been searched
+    // and found empty, and charge for it.
     int quiet = 0;
+    for (final RoundRecord r in session.rounds.reversed) {
+      if (r.returnedSomethingNew) break;
+      quiet++;
+    }
 
     while (true) {
       final List<String> angleSet = angleSetFor(

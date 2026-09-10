@@ -356,6 +356,42 @@ void main() {
       );
     });
 
+    test('silence already on the record still counts', () async {
+      // A session as an interruption leaves it: one round that found
+      // something, one that found nothing, and no dryness decision — which is
+      // exactly what is on disk when a sitting is stopped or fails after a
+      // quiet round.
+      final Session ran = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+      final Session interrupted = ran.copyWith(
+        rounds: ran.rounds.take(2).toList(),
+        manifest: RunManifest(
+          sessionId: ran.id,
+          templateId: ran.manifest.templateId,
+          tier: ran.manifest.tier,
+          transport: 'cli',
+          startedAt: ran.manifest.startedAt,
+        ),
+      );
+      expect(interrupted.rounds.last.returnedSomethingNew, isFalse);
+
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(interrupted);
+
+      expect(
+        done.manifest.dryness!.firstRound,
+        interrupted.rounds.last.number,
+        reason:
+            'Dryness is a property of the session, not of one process\'s '
+            'memory. A resumed run counting from zero re-searches a round '
+            'that was already searched and found empty, and charges for it.',
+      );
+    });
+
     test('a resumed run never re-issues a direction id', () async {
       final Session first = await CouncilRun(
         transport: ScriptedCouncil(silentFromRound: 2),

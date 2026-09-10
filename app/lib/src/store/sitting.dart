@@ -156,8 +156,9 @@ class Sitting extends ChangeNotifier {
         'directions.',
       );
     } on CouncilStopped {
-      // A stop is a fact about the client, not a diagnosis about the sitting.
-      await _keep(run: null);
+      // A stop is a fact about the client, not a diagnosis about the sitting,
+      // and nothing needs saving here: every round that closed went to disk
+      // through the barrier callback as it closed.
       _phase = SittingPhase.idle;
     } on CouncilUnavailable catch (e) {
       _fail(e.detail);
@@ -315,11 +316,6 @@ class Sitting extends ChangeNotifier {
     final RegExpMatch? m = RegExp(r'until (\S+)').firstMatch(detail);
     if (m == null) return null;
     return DateTime.tryParse(m.group(1)!)?.toLocal();
-  }
-
-  Future<void> _keep({CouncilRun? run}) async {
-    final Session? sofar = run?.sessionSoFar;
-    if (sofar != null) await library.save(sofar);
   }
 
   void _handMoved() {
