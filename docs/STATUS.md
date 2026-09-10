@@ -129,7 +129,10 @@ green and published nothing.
 
 Both workflows now take their version and build number from one script, since
 `github.run_number` counts per workflow and a tagged release was numbered off a
-different counter than the `dev` builds the updater compares it against.
+different counter than the `dev` builds the updater compares it against. The two
+constants they both pin — the Flutter version and the keystore fingerprint —
+are compared against each other by a job, because a copy that drifts asserts
+nothing.
 
 ## Not started
 

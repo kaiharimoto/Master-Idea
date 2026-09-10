@@ -244,6 +244,28 @@ jobs:
             out/*.zip
           retention-days: 14
 
+  # Two constants live in both workflow files, because Actions has no way to
+  # share an `env` across them short of a reusable workflow. The keystore
+  # fingerprint is the thing CI exists to assert, and a copy that drifts
+  # asserts nothing — so the copies are compared rather than trusted.
+  constants:
+    name: The two workflows agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare the pinned constants
+        run: |
+          for key in FLUTTER_VERSION DEV_KEY_SHA256; do
+            a=$(grep -m1 "^  $key:" .github/workflows/ci.yml)
+            b=$(grep -m1 "^  $key:" .github/workflows/release.yml)
+            echo "ci:      $a"
+            echo "release: $b"
+            if [ "$a" != "$b" ]; then
+              echo "::error::$key differs between ci.yml and release.yml"
+              exit 1
+            fi
+          done
+
   # The screens, rendered.
   #
   # Never compared: font rasterisation differs between machines and a pixel
@@ -305,7 +327,7 @@ jobs:
 
   publish-dev:
     name: Publish the rolling dev build
-    needs: [core, engine, android, windows, judgeset]
+    needs: [core, engine, android, windows, judgeset, constants]
     # Real pushes only, and only from a branch builds are meant to come from.
     # The default branch is the usual answer; until this repository has one
     # with anything on it, the development branch is where installable builds
