@@ -34,7 +34,14 @@ mi — Master Idea, headless
       Record what the client chose, compute the integration across that set,
       and write the pitch.
 
+  mi rm <sessions-dir> <id>
+      Delete a stored session and everything in it.
+
   mi list <sessions-dir>
+
+Common options:
+  --claude <path>   Use this binary rather than asking the operating system.
+  --model <name>    Send this model to every turn.
 ''';
 
 Future<void> main(List<String> argv) async {
@@ -64,6 +71,8 @@ Future<int> _dispatch(List<String> argv) async {
         return _render(rest);
       case 'select':
         return await _select(rest);
+      case 'rm':
+        return _rm(rest);
       case 'list':
         return _list(rest);
       default:
@@ -73,6 +82,15 @@ Future<int> _dispatch(List<String> argv) async {
   } on StateError catch (e) {
     stderr.writeln(e.message);
     return 70;
+  } on FormatException catch (e) {
+    // A truncated or hand-edited file. Named for what it is rather than
+    // reaching the terminal as an uncaught crash with a Dart stack trace,
+    // which tells the person holding the files nothing they can act on.
+    stderr.writeln('A stored file could not be read: ${e.message}');
+    return 65;
+  } on TypeError catch (e) {
+    stderr.writeln('A stored file is not the shape this build expects: $e');
+    return 65;
   }
 }
 
@@ -146,19 +164,57 @@ Future<int> _run(List<String> args) async {
     '${store.root.path}/${session.id}/.council',
   )..createSync(recursive: true);
 
+  if (!store.lock(session.id, 'mi run pid $pid')) {
+    stderr.writeln(
+      'Session ${session.id} is already being run by ${store.lockedBy(session.id)}. '
+      'Two writers hold the whole session in memory and write it out entire, '
+      'so the second to finish would discard the first\'s rounds.',
+    );
+    return 73;
+  }
+
+  final CliCouncil council = CliCouncil(
+    install: install,
+    // A directory of the council's own. A CLAUDE.md in the project the idea
+    // is about must not join the deliberation uninvited.
+    workingDirectory: scratch.path,
+    model: _option(args, '--model'),
+  );
+  for (final String note in council.notes) {
+    stdout.writeln('note: $note');
+  }
+
   final CouncilRun run = CouncilRun(
-    transport: CliCouncil(
-      install: install,
-      // A directory of the council's own. A CLAUDE.md in the project the idea
-      // is about must not join the deliberation uninvited.
-      workingDirectory: scratch.path,
-      model: _option(args, '--model'),
-    ),
+    transport: council,
     onEvent: (RunEvent e) => stdout.writeln(e),
+    // Every barrier, not just the end. A run killed at hour four should lose
+    // the round it was in and nothing else.
+    onBarrier: (Session s) async => store.write(s),
   );
 
-  final Session done = await run.deliberate(session);
-  store.write(done);
+  final Session done;
+  try {
+    done = await run.deliberate(
+      session.copyWith(manifest: session.manifest.onTransport('cli')),
+    );
+  } on CouncilUnavailable catch (e) {
+    final Session? sofar = run.sessionSoFar;
+    if (sofar != null) store.write(sofar);
+    stderr.writeln('$e');
+    stderr.writeln(
+      'The rounds already closed are stored. Fix this and run the same '
+      'command again — the sitting resumes from round '
+      '${(sofar?.rounds.length ?? 0) + 1}.',
+    );
+    return 75;
+  } on CouncilStopped catch (e) {
+    final Session? sofar = run.sessionSoFar;
+    if (sofar != null) store.write(sofar);
+    stdout.writeln('$e');
+    return 0;
+  } finally {
+    store.unlock(session.id);
+  }
 
   final DrynessDecision dry = done.manifest.dryness!;
   stdout.writeln(
@@ -268,18 +324,48 @@ Future<int> _select(List<String> args) async {
   final Session assembled = session.copyWith(
     selection: chosen,
     integration: integration,
+    // An integration computed for a selection nobody has any more is worse
+    // than none: it reads as current.
+    dropIntegration: integration == null,
   );
   final Session withPitch = assembled.copyWith(
     pitch: PitchComposer.compose(assembled),
   );
-  store.write(withPitch);
 
+  // Checked before it is written, not after. A pitch that fails this and is
+  // on disk anyway is a file somebody will send.
   final List<String> tells = PitchPortability.tells(withPitch.pitch);
   if (tells.isNotEmpty) {
     stderr.writeln('This pitch is not portable. Found: ${tells.join(', ')}');
+    stderr.writeln('Nothing was written.');
     return 65;
   }
+
+  store.write(withPitch);
   stdout.writeln('Wrote ${store.root.path}/${session.id}/pitch.md');
+  return 0;
+}
+
+int _rm(List<String> args) {
+  if (args.length < 2) {
+    stderr.writeln('mi rm <sessions-dir> <id>');
+    return 64;
+  }
+  final SessionStore store = _store(args[0]);
+  if (!store.exists(args[1])) {
+    stderr.writeln('No session "${args[1]}" in ${args[0]}.');
+    return 66;
+  }
+  // Read for the title, but never let an unreadable session refuse to be
+  // deleted: an unopenable session is the one a person most wants rid of.
+  String title = '';
+  try {
+    title = store.read(args[1]).title;
+  } on Object {
+    title = 'unreadable';
+  }
+  store.delete(args[1]);
+  stdout.writeln('Deleted ${args[1]} — $title');
   return 0;
 }
 

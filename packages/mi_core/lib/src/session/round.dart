@@ -14,6 +14,8 @@ class AngleReturn {
     required this.by,
     required this.proposedIds,
     required this.keptIds,
+    this.exhausted = false,
+    this.unread = const <String>[],
   });
 
   final String angleId;
@@ -28,11 +30,31 @@ class AngleReturn {
   /// round's real yield.
   final List<String> keptIds;
 
+  /// The seat said `mi-none`: this angle has nothing left.
+  ///
+  /// Recorded because it is the difference between an angle that is finished
+  /// and a reply nobody could read, and dryness means the first of those. A
+  /// round of silence that was really a round of misreads is a run ended by
+  /// a parser.
+  final bool exhausted;
+
+  /// Lines inside a block the parser could not use.
+  ///
+  /// Kept for the same reason: a misread that disappears silently is
+  /// indistinguishable from a council that had nothing to say.
+  final List<String> unread;
+
+  /// The seat answered, and nothing came of it that it did not claim.
+  bool get returnedNothingReadable =>
+      !exhausted && proposedIds.isEmpty && unread.isNotEmpty;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'angleId': angleId,
     'by': by,
     'proposedIds': proposedIds,
     'keptIds': keptIds,
+    'exhausted': exhausted,
+    if (unread.isNotEmpty) 'unread': unread,
   };
 
   static AngleReturn fromJson(Map<String, Object?> j) => AngleReturn(
@@ -42,6 +64,10 @@ class AngleReturn {
         .map((Object? e) => '$e')
         .toList(),
     keptIds: (j['keptIds'] as List<Object?>? ?? const <Object?>[])
+        .map((Object? e) => '$e')
+        .toList(),
+    exhausted: j['exhausted'] == true,
+    unread: (j['unread'] as List<Object?>? ?? const <Object?>[])
         .map((Object? e) => '$e')
         .toList(),
   );

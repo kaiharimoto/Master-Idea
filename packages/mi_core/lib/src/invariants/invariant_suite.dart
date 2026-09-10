@@ -266,8 +266,21 @@ abstract final class InvariantSuite {
         );
       }
 
-      final CouncilRole raterRole = AgentInstance.parse(r.ratedBy).role;
-      if (raterRole.can(CouncilLicence.propose)) {
+      // Guarded rather than trusted. This suite's job is to catch a session
+      // that has been tampered with or written by something else, and a check
+      // that throws on the malformed input it exists to detect reports
+      // nothing at all — it crashes the tool instead of failing the session.
+      final CouncilRole? raterRole = _roleOf(r.ratedBy);
+      if (raterRole == null) {
+        out.add(
+          InvariantFinding(
+            Invariant.independentRating,
+            'Rated by "${r.ratedBy}", which does not name a seat this council '
+            'could have seated.',
+            subject: subject,
+          ),
+        );
+      } else if (raterRole.can(CouncilLicence.propose)) {
         out.add(
           InvariantFinding(
             Invariant.independentRating,
@@ -525,6 +538,16 @@ abstract final class InvariantSuite {
     }
 
     return out;
+  }
+
+  /// The role behind a seat id, or null when the id is not one this council
+  /// could have issued.
+  static CouncilRole? _roleOf(String agentId) {
+    try {
+      return AgentInstance.parse(agentId).role;
+    } on Object {
+      return null;
+    }
   }
 
   static RoundRecord? _round(Session s, int number) {

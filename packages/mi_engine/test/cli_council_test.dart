@@ -142,4 +142,110 @@ void main() {
       throwsA(isA<CouncilPaused>()),
     );
   });
+
+  CouncilTurn turn([String purpose = 'propose']) => CouncilTurn(
+    agent: const AgentInstance(roleId: 'prospector', round: 1, ordinal: 1),
+    purpose: purpose,
+    prompt: 'You are a prospector on a council.',
+    conversation: 'propose-1-inversion',
+  );
+
+  group('a failure that is not a limit', () {
+    test('an expired login fails the sitting rather than pausing it', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+        environment: const <String, String>{'MI_FAKE_AUTH': '1'},
+      );
+      await expectLater(
+        council.ask(turn()),
+        throwsA(
+          isA<CouncilUnavailable>().having(
+            (CouncilUnavailable e) => e.detail,
+            'detail',
+            contains('not logged in'),
+          ),
+        ),
+        reason:
+            'Waiting does not fix a password. A run that waits it out drops '
+            'every angle and then records itself as having gone dry.',
+      );
+    });
+
+    test('any other non-zero exit says what the CLI said', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+        environment: const <String, String>{'MI_FAKE_BROKEN': '1'},
+      );
+      await expectLater(
+        council.ask(turn()),
+        throwsA(
+          isA<CouncilUnavailable>().having(
+            (CouncilUnavailable e) => e.detail,
+            'detail',
+            contains('not a limit'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('a turn that never comes back', () {
+    test('is killed and reported, not waited on forever', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+        environment: const <String, String>{'MI_FAKE_HANG': '1'},
+        turnTimeout: const Duration(seconds: 2),
+      );
+      await expectLater(
+        council.ask(turn()),
+        throwsA(isA<CouncilUnavailable>()),
+        reason:
+            'A hung child holds its future forever, which on an unattended '
+            'run is indistinguishable from a council thinking hard.',
+      );
+    });
+  });
+
+  group('how many turns are in the air at once', () {
+    test('never more than the transport was told to allow', () async {
+      final Directory live = Directory('${tmp.path}/live')
+        ..createSync(recursive: true);
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+        maxConcurrent: 2,
+        environment: <String, String>{'MI_FAKE_LIVE_DIR': '${live.path}/n'},
+      );
+
+      await Future.wait(<Future<CouncilReply>>[
+        for (int i = 0; i < 8; i++) council.ask(turn()),
+      ]);
+
+      final List<int> peaks = File(
+        '${live.path}/peak',
+      ).readAsStringSync().trim().split('\n').map(int.parse).toList();
+      expect(
+        peaks.reduce((int a, int b) => a > b ? a : b),
+        lessThanOrEqualTo(2),
+        reason:
+            'A round at the largest tier would otherwise start some fifty '
+            'processes at once, which is itself the commonest way to provoke '
+            'the limits this class then has to wait out.',
+      );
+    });
+  });
+
+  group('stopping the transport', () {
+    test('refuses every turn after it, at once', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+      );
+      council.cancel();
+      await expectLater(council.ask(turn()), throwsA(isA<CouncilStopped>()));
+    });
+  });
 }

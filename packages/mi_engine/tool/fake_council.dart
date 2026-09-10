@@ -118,7 +118,56 @@ Future<void> main(List<String> args) async {
     exit(1);
   }
 
+  // A failure that is not a limit and never lifts by waiting. The real one is
+  // an expired login; the shape is what matters — non-zero, words on stderr,
+  // and nothing about a limit anywhere in them.
+  if (Platform.environment['MI_FAKE_AUTH'] == '1') {
+    stderr.writeln('Invalid API key · Please run /login');
+    exit(1);
+  }
+  // Answer normally for the first n turns and then fail for a reason that is
+  // not a limit, so a test can prove what an interrupted run leaves on disk.
+  final String? brokenAfter = Platform.environment['MI_FAKE_BROKEN_AFTER'];
+  if (brokenAfter != null) {
+    final File counter = File('.turns');
+    final int done =
+        int.tryParse(counter.existsSync() ? counter.readAsStringSync() : '0') ??
+        0;
+    counter.writeAsStringSync('${done + 1}', flush: true);
+    if (done >= (int.tryParse(brokenAfter) ?? 0)) {
+      stderr.writeln('something went wrong and it was not a limit');
+      exit(2);
+    }
+  }
+
+  if (Platform.environment['MI_FAKE_BROKEN'] == '1') {
+    stderr.writeln('something went wrong and it was not a limit');
+    exit(2);
+  }
+
+  // A turn that never comes back, for the timeout.
+  if (Platform.environment['MI_FAKE_HANG'] == '1') {
+    await Future<void>.delayed(const Duration(minutes: 10));
+    exit(0);
+  }
+
+  // Records how many of these processes are alive at once, so a test can
+  // prove the transport's concurrency bound rather than assume it.
+  final String? liveDir = Platform.environment['MI_FAKE_LIVE_DIR'];
+  File? marker;
+  if (liveDir != null) {
+    Directory(liveDir).createSync(recursive: true);
+    marker = File('$liveDir/$pid');
+    marker.writeAsStringSync('live');
+    final int live = Directory(liveDir).listSync().length;
+    File(
+      '$liveDir/../peak',
+    ).writeAsStringSync('$live\n', mode: FileMode.append, flush: true);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  }
+
   final String body = _answer(prompt);
+  marker?.deleteSync();
 
   if (format == 'stream-json') {
     if (!args.contains('--verbose')) {

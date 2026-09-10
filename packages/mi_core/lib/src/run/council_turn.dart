@@ -49,15 +49,55 @@ class CouncilReply {
 /// never be confused: an empty reply is a round returning nothing, which is
 /// evidence of dryness, and a rate limit is the opposite of evidence.
 class CouncilPaused implements Exception {
-  CouncilPaused(this.kind, this.detail, this.until);
+  CouncilPaused(this.kind, this.detail, this.until, {this.source = 'guessed'});
 
-  /// `rate` or `session`.
+  /// `session`, `weekly`, `overage`, `rate` or `transient`.
   final String kind;
   final String detail;
   final DateTime until;
 
+  /// How [until] was arrived at: `explicit` when the provider gave a
+  /// timestamp, `stated` when it gave a delay or a clock time, `inferred` when
+  /// it was worked out from the start of the current block, `guessed`
+  /// otherwise.
+  ///
+  /// Recorded because a resume time is acted on for hours with nobody
+  /// watching, and a guess that reads like a fact is how a run comes back
+  /// early, burns a call, and pauses again.
+  final String source;
+
   @override
-  String toString() => 'CouncilPaused($kind, until $until): $detail';
+  String toString() => 'CouncilPaused($kind, until $until, $source): $detail';
+}
+
+/// Raised when the client stopped the sitting.
+///
+/// Never a [CouncilPaused]: a pause is waited out and retried, and a stop must
+/// end the run at once. It is also not a failure — the rounds already closed
+/// are kept, and the sitting resumes from the barrier it reached.
+class CouncilStopped implements Exception {
+  CouncilStopped(this.at);
+
+  final DateTime at;
+
+  @override
+  String toString() => 'The sitting was stopped at ${at.toIso8601String()}.';
+}
+
+/// Raised when the transport failed for a reason that is not a provider limit.
+///
+/// Not logged in, a model the CLI does not know, an unknown flag, a binary
+/// that is not there any more: none of these lift by waiting, and treating
+/// them as pauses is how a run spends four hours in silence, drops every angle
+/// and records itself as having gone dry with an empty dossier.
+class CouncilUnavailable implements Exception {
+  CouncilUnavailable(this.detail);
+
+  /// What the transport said, as it said it.
+  final String detail;
+
+  @override
+  String toString() => 'The council could not be reached. $detail';
 }
 
 /// How the run reaches a model. One method, so a scripted double and the real

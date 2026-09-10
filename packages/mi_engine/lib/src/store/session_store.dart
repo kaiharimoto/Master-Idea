@@ -66,6 +66,11 @@ class SessionStore {
     return micros.toRadixString(36);
   }
 
+  /// Ids of stored sessions.
+  ///
+  /// A directory without a `session.json` is not listed: a half-written
+  /// session is not a session, and one that appears in the library and then
+  /// throws when opened is worse than one that never appeared.
   List<String> listIds() {
     if (!root.existsSync()) return const <String>[];
     return <String>[
@@ -92,6 +97,7 @@ class SessionStore {
     Directory('${dir.path}/ratings').createSync(recursive: true);
 
     _json('${dir.path}/session.json', <String, Object?>{
+      'schema': Session.schema,
       'id': s.id,
       'taskId': s.taskId,
       'title': s.title,
@@ -103,12 +109,12 @@ class SessionStore {
     // Frozen at the gate. Written once; nothing after the gate may re-elicit
     // an answer, so nothing after the gate rewrites this.
     _json('${dir.path}/interview/record.json', s.interview.toJson());
-    File('${dir.path}/interview/brief.md').writeAsStringSync(
+    _text(
+      '${dir.path}/interview/brief.md',
       '# The brief, approved verbatim by the client\n\n'
-      '${s.interview.brief.restatement}\n\n'
-      '_Approved ${s.interview.brief.approvedAt.toIso8601String()}, '
-      'hash ${s.interview.brief.hash}._\n',
-      flush: true,
+          '${s.interview.brief.restatement}\n\n'
+          '_Approved ${s.interview.brief.approvedAt.toIso8601String()}, '
+          'hash ${s.interview.brief.hash}._\n',
     );
 
     for (final RoundRecord r in s.rounds) {
@@ -135,15 +141,75 @@ class SessionStore {
     });
     _json('${dir.path}/run_manifest.json', s.manifest.toJson());
 
+    final File pitch = File('${dir.path}/pitch.md');
     if (s.pitch.isNotEmpty) {
-      File('${dir.path}/pitch.md').writeAsStringSync(s.pitch, flush: true);
+      _text(pitch.path, s.pitch);
+    } else if (pitch.existsSync()) {
+      // The client changed their selection, so the pitch that was here
+      // describes a set they no longer have. Removed rather than left: a stale
+      // launch document is worse than none, because it reads as current.
+      pitch.deleteSync();
     }
+  }
+
+  /// Remove a session and everything in it.
+  ///
+  /// Refuses anything that is not a session directory directly under the
+  /// root, because this deletes recursively and a path that walked out of the
+  /// library would take something else with it.
+  void delete(String id) {
+    if (id.isEmpty || id.contains('/') || id.contains(r'\') || id == '..') {
+      throw ArgumentError.value(id, 'id', 'not a session id');
+    }
+    final Directory dir = _dir(id);
+    if (!dir.existsSync()) return;
+    if (!File('${dir.path}/session.json').existsSync()) {
+      throw StateError('$id is not a stored session; refusing to delete it.');
+    }
+    dir.deleteSync(recursive: true);
+  }
+
+  /// Claim a session for a run.
+  ///
+  /// Two writers on one session is not a race the store can win by being
+  /// careful: the app and the command line both hold a whole `Session` in
+  /// memory and write it out entire, so the second to finish silently
+  /// discards the first's rounds. The lock is advisory and deliberately
+  /// crude — a file with a pid and a time in it — because the failure it
+  /// prevents is somebody running `mi run` on a session their app already has
+  /// open, and that is a person to be told, not a transaction to be rolled
+  /// back.
+  bool lock(String id, String by) {
+    final File f = File('${_dir(id).path}/.lock');
+    if (f.existsSync()) return false;
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync('$by ${_now().toIso8601String()}\n', flush: true);
+    return true;
+  }
+
+  void unlock(String id) {
+    final File f = File('${_dir(id).path}/.lock');
+    if (f.existsSync()) f.deleteSync();
+  }
+
+  /// Who holds the lock, if anyone.
+  String? lockedBy(String id) {
+    final File f = File('${_dir(id).path}/.lock');
+    return f.existsSync() ? f.readAsStringSync().trim() : null;
   }
 
   /// Read a session back from its files alone.
   Session read(String id) {
     final Directory dir = _dir(id);
     final Map<String, Object?> index = _readJson('${dir.path}/session.json');
+    final int schema = (index['schema'] as num?)?.toInt() ?? 1;
+    if (schema > Session.schema) {
+      throw StateError(
+        'Session $id was written by a newer build (stored shape $schema, this '
+        'build reads ${Session.schema}). Update before opening it — reading '
+        'it here would be guessing at fields whose meaning has changed.',
+      );
+    }
     final InterviewRecord interview = InterviewRecord.fromJson(
       _readJson('${dir.path}/interview/record.json'),
     );
@@ -228,13 +294,16 @@ class SessionStore {
     return jsonDecode(f.readAsStringSync())! as Map<String, Object?>;
   }
 
-  void _json(String path, Map<String, Object?> value) {
-    final File target = File(path);
+  void _json(String path, Map<String, Object?> value) =>
+      _text(path, const JsonEncoder.withIndent('  ').convert(value));
+
+  /// Written to a temporary name and renamed into place, so a process killed
+  /// mid-write leaves the previous version rather than half of the new one.
+  /// Every stored file goes through here, the two Markdown ones included — a
+  /// half-written pitch is exactly as useless as a half-written record.
+  void _text(String path, String contents) {
     final File temp = File('$path.tmp');
-    temp.writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(value),
-      flush: true,
-    );
-    temp.renameSync(target.path);
+    temp.writeAsStringSync(contents, flush: true);
+    temp.renameSync(path);
   }
 }

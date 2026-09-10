@@ -291,6 +291,177 @@ void main() {
     });
   });
 
+  group('what an interrupted run leaves behind', () {
+    test('every closed round reaches the barrier callback', () async {
+      final List<int> stored = <int>[];
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+        onBarrier: (Session s) async => stored.add(s.rounds.length),
+      ).deliberate(referenceSession());
+
+      expect(
+        stored,
+        <int>[1, 2, 3, 4, 4],
+        reason:
+            'A round is stored when it closes, and the dryness decision once '
+            'more at the end — a run saved only when it finishes is a run '
+            'that loses six hours to a power cut.',
+      );
+      expect(done.rounds, hasLength(4));
+    });
+
+    test('a stop ends the run and keeps what closed before it', () async {
+      final List<Session> stored = <Session>[];
+      final CouncilRun run = CouncilRun(
+        // Late enough that a round has closed, so there is something to keep.
+        transport: ScriptedCouncil(stopOnCall: 100),
+        clock: FakeClock(),
+        onBarrier: (Session s) async => stored.add(s),
+      );
+
+      await expectLater(
+        run.deliberate(referenceSession()),
+        throwsA(isA<CouncilStopped>()),
+        reason:
+            'A stop is the client, not the provider. Waiting it out would '
+            'put the same turn back on screen forever.',
+      );
+      expect(stored, isNotEmpty);
+      expect(run.sessionSoFar!.rounds, isNotEmpty);
+      expect(
+        run.sessionSoFar!.manifest.dryness,
+        isNull,
+        reason: 'A sitting that was stopped has emphatically not run dry.',
+      );
+    });
+
+    test('a failure that is not a limit ends the run at once', () async {
+      final CouncilRun run = CouncilRun(
+        transport: ScriptedCouncil(failOnCall: 2),
+        clock: FakeClock(),
+      );
+
+      await expectLater(
+        run.deliberate(referenceSession()),
+        throwsA(isA<CouncilUnavailable>()),
+        reason:
+            'Not logged in does not lift by waiting. A run that waits it out '
+            'loses every search and then records itself as having gone dry.',
+      );
+      expect(
+        run.sessionSoFar!.ledger.dropped,
+        isEmpty,
+        reason: 'Nothing was deliberately left: the council never got to look.',
+      );
+    });
+
+    test('a resumed run never re-issues a direction id', () async {
+      final Session first = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      // Resumed from a session that already holds directions, the way the app
+      // resumes one that was interrupted.
+      final Session second =
+          await CouncilRun(
+            transport: ScriptedCouncil(silentFromRound: 3),
+            clock: FakeClock(),
+          ).deliberate(
+            first.copyWith(
+              manifest: RunManifest(
+                sessionId: first.id,
+                templateId: first.manifest.templateId,
+                tier: first.manifest.tier,
+                transport: 'cli',
+                startedAt: first.manifest.startedAt,
+              ),
+            ),
+          );
+
+      final List<String> ids = <String>[
+        for (final Direction d in second.directions) d.id,
+      ];
+      expect(
+        ids.toSet().length,
+        ids.length,
+        reason:
+            'The store writes a rating file once and never rewrites it, so a '
+            'reissued id loses the new direction\'s verdicts silently.',
+      );
+    });
+  });
+
+  group('a limit is waited out for as long as it takes', () {
+    test('more times than any retry budget would have allowed', () async {
+      final FakeClock clock = FakeClock();
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(pauseUntilCall: 6),
+        clock: clock,
+      ).deliberate(referenceSession());
+
+      expect(
+        clock.waited.length,
+        greaterThan(3),
+        reason:
+            'A limit always lifts. A run that gave up on the fourth wait '
+            'would record the provider\'s silence as the council\'s.',
+      );
+      expect(done.directions, isNotEmpty);
+      expect(done.manifest.pauses.first.source, 'stated');
+    });
+  });
+
+  group('what a round says about itself', () {
+    test('an exhausted angle is not a misread one', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      final RoundRecord quiet = done.rounds.firstWhere(
+        (RoundRecord r) => r.number == 2,
+      );
+      expect(
+        quiet.returns.every((AngleReturn r) => r.exhausted),
+        isTrue,
+        reason:
+            'mi-none is what takes a run to dryness, and a round of silence '
+            'that was really a round nobody could read is a run ended by a '
+            'parser.',
+      );
+      expect(
+        done.rounds.first.returns.every((AngleReturn r) => r.exhausted),
+        isFalse,
+      );
+    });
+
+    test('a direction that cites a gap fills it on the map', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      final List<Territory> filled = done.ledger.territories
+          .where((Territory t) => t.filledByDirectionIds.isNotEmpty)
+          .toList();
+      expect(
+        filled,
+        isNotEmpty,
+        reason:
+            'Without this the ledger reports "no direction cites this '
+            'territory" for every territory in every session ever produced, '
+            'which is the completeness claim reading as unearned.',
+      );
+      for (final Territory t in filled) {
+        for (final String id in t.filledByDirectionIds) {
+          expect(done.directionById(id), isNotNull);
+        }
+      }
+    });
+  });
+
   group('the angle rotation', () {
     test('reaches every angle in the catalog at the narrowest breadth', () {
       final Set<String> seen = <String>{};

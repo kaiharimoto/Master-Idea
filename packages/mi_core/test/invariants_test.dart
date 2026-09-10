@@ -308,4 +308,37 @@ void main() {
       },
     );
   });
+
+  group('a session that was tampered with', () {
+    test('reports a seat id nobody could have issued, rather than '
+        'crashing on it', () async {
+      final Session s = await goodSession();
+      final Rating r = s.ratings.first;
+      final Session broken = s.copyWith(
+        ratings: <Rating>[
+          Rating(
+            directionId: r.directionId,
+            dimensionId: r.dimensionId,
+            verdict: r.verdict,
+            vocabularyId: r.vocabularyId,
+            ratedBy: 'whoever felt like it',
+            context: r.context,
+            because: r.because,
+            dissents: r.dissents,
+          ),
+          ...s.ratings.skip(1),
+        ],
+      );
+
+      final InvariantReport report = InvariantSuite.run(broken);
+      expect(
+        report.holdsFor(Invariant.independentRating),
+        isFalse,
+        reason:
+            'This suite exists to catch a doctored session. A check that '
+            'throws on the malformed input it is looking for crashes the '
+            'tool instead of failing the session.',
+      );
+    });
+  });
 }

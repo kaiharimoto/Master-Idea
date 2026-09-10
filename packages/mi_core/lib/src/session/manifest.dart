@@ -71,16 +71,24 @@ class LimitPause {
     required this.until,
     required this.kind,
     required this.detail,
+    this.source = 'guessed',
   });
 
   final DateTime from;
   final DateTime until;
 
-  /// `rate` or `session`.
+  /// `session`, `weekly`, `overage`, `rate` or `transient`.
   final String kind;
 
   /// What the provider said, as it said it.
   final String detail;
+
+  /// How the resume time was arrived at: `explicit`, `stated`, `inferred` or
+  /// `guessed`. Recorded because a guess and a timestamp the provider gave are
+  /// worth different amounts to whoever reads this afterwards, and a guess
+  /// that reads like a fact is how an unattended run is trusted about
+  /// something nobody ever knew.
+  final String source;
 
   Duration get length => until.difference(from);
 
@@ -89,6 +97,7 @@ class LimitPause {
     'until': until.toIso8601String(),
     'kind': kind,
     'detail': detail,
+    'source': source,
     'seconds': length.inSeconds,
   };
 
@@ -97,6 +106,7 @@ class LimitPause {
     until: DateTime.parse('${j['until']}'),
     kind: '${j['kind']}',
     detail: '${j['detail']}',
+    source: '${j['source'] ?? 'guessed'}',
   );
 }
 
@@ -154,16 +164,25 @@ class RunManifest {
   RunManifest closed(DateTime at, DrynessDecision d) =>
       _copy(endedAt: at, dryness: d);
 
+  /// Record which transport actually drove the sitting.
+  ///
+  /// Written when the sitting opens rather than when the session does, because
+  /// the route is a fact about the device the run happened on and the session
+  /// may have been opened on the other one. A hand-carried session whose
+  /// manifest says `cli` is claiming six hours of autonomy that no phone has.
+  RunManifest onTransport(String t) => _copy(transport: t);
+
   RunManifest _copy({
     List<ModelCall>? calls,
     List<LimitPause>? pauses,
     DateTime? endedAt,
     DrynessDecision? dryness,
+    String? transport,
   }) => RunManifest(
     sessionId: sessionId,
     templateId: templateId,
     tier: tier,
-    transport: transport,
+    transport: transport ?? this.transport,
     startedAt: startedAt,
     endedAt: endedAt ?? this.endedAt,
     calls: calls ?? this.calls,

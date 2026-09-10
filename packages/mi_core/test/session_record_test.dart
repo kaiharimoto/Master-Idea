@@ -154,4 +154,51 @@ void main() {
       expect(SessionTitle.slug('!!!'), 'session');
     });
   });
+
+  group('a session copy', () {
+    test('can drop an integration the selection has outgrown', () {
+      final Session s = referenceSession().copyWith(
+        selection: <String>['d-0001'],
+        integration: Integration(
+          forSelection: const <String>['d-0001'],
+          becomes: 'One thing rather than three.',
+          interactions: const <Interaction>[],
+          by: 'integrator#0.1',
+          computedAt: DateTime.utc(2026, 3, 1, 12),
+        ),
+        pitch: 'A pitch for one direction.',
+      );
+
+      final Session changed = s.copyWith(
+        selection: const <String>['d-0001', 'd-0002'],
+        dropIntegration: true,
+        dropPitch: true,
+      );
+
+      expect(changed.integration, isNull);
+      expect(changed.pitch, isEmpty);
+      expect(
+        s.integration,
+        isNotNull,
+        reason: 'The original is untouched; a session is a value.',
+      );
+    });
+
+    test('leaving them alone is still the default', () {
+      final Session s = referenceSession().copyWith(pitch: 'kept');
+      expect(s.copyWith(selection: const <String>['d-0001']).pitch, 'kept');
+    });
+  });
+
+  group('the stored shape', () {
+    test('says which version wrote it', () {
+      expect(
+        referenceSession().toJson()['schema'],
+        Session.schema,
+        reason:
+            'A build that reads files it does not understand should say so, '
+            'rather than throwing a cast error from four layers down.',
+      );
+    });
+  });
 }

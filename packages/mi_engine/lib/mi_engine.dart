@@ -7,6 +7,7 @@
 library;
 
 export 'src/cli/claude_cli.dart';
+export 'src/cli/limit_reading.dart';
 export 'src/cli/turn_plan.dart';
 export 'src/store/session_store.dart';
 export 'src/transport/cli_council.dart';

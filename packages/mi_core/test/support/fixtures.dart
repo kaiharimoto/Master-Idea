@@ -41,6 +41,9 @@ class ScriptedCouncil implements CouncilTransport {
     this.perAngle = 2,
     this.silentFromRound = 3,
     this.pauseOnCall,
+    this.pauseUntilCall,
+    this.stopOnCall,
+    this.failOnCall,
     this.unsourcedInRound,
     this.dissentEvery = 3,
   });
@@ -54,6 +57,16 @@ class ScriptedCouncil implements CouncilTransport {
 
   /// Raise a session limit on the nth call, once.
   final int? pauseOnCall;
+
+  /// Raise a session limit on every call up to this one, so a run has to sit
+  /// through more waits than any retry budget would have allowed.
+  final int? pauseUntilCall;
+
+  /// The client stopped the sitting on the nth call.
+  final int? stopOnCall;
+
+  /// The transport failed on the nth call for a reason that is not a limit.
+  final int? failOnCall;
 
   /// Return a direction citing an interview answer that does not exist, to
   /// prove the run refuses it rather than storing an unsourced direction.
@@ -84,6 +97,20 @@ class ScriptedCouncil implements CouncilTransport {
         '5-hour limit reached',
         DateTime.utc(2026, 3, 1, 14),
       );
+    }
+    if (pauseUntilCall != null && calls <= pauseUntilCall!) {
+      throw CouncilPaused(
+        'session',
+        '5-hour limit reached',
+        DateTime.utc(2026, 3, 1, 9).add(Duration(hours: calls)),
+        source: 'stated',
+      );
+    }
+    if (stopOnCall != null && calls == stopOnCall) {
+      throw CouncilStopped(DateTime.utc(2026, 3, 1, 10));
+    }
+    if (failOnCall != null && calls == failOnCall) {
+      throw CouncilUnavailable('The CLI exited with 1: not logged in');
     }
     switch (turn.purpose) {
       case 'propose':

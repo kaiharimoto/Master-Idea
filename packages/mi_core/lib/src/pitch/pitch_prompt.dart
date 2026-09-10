@@ -203,7 +203,10 @@ abstract final class PitchComposer {
 /// a rule of thumb.
 abstract final class PitchPortability {
   static final List<RegExp> _tells = <RegExp>[
-    RegExp(r'<', caseSensitive: false),
+    // A tag, not the character. `<` on its own catches "in <10 minutes" and
+    // "a < b", which are prose a direction may perfectly well contain — and a
+    // portability check that fires on ordinary writing is one nobody reads.
+    RegExp(r'</?[a-z_][a-z0-9_.:-]*(\s[^<>]*)?/?>', caseSensitive: false),
     RegExp(r'<function_calls>', caseSensitive: false),
     RegExp(r'<system-reminder', caseSensitive: false),
     RegExp(r'<invoke\b', caseSensitive: false),

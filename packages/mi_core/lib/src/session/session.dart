@@ -36,6 +36,14 @@ class Session {
     this.pitch = '',
   });
 
+  /// The version of the stored shape.
+  ///
+  /// Written into every stored session so that a build reading files it does
+  /// not understand says so, rather than throwing a cast error from four
+  /// layers down or — worse — reading a session whose meaning has changed
+  /// underneath the same field names.
+  static const int schema = 1;
+
   final String id;
 
   /// Short kebab-case identifier used for the session directory.
@@ -116,6 +124,13 @@ class Session {
     return out..sort();
   }
 
+  /// A copy with what changed.
+  ///
+  /// [dropIntegration] and [dropPitch] exist because `null` cannot mean
+  /// "remove this" in a copy where it already means "leave this alone". Both
+  /// are removals the client makes constantly — every change to the selection
+  /// invalidates what the set becomes together — and without them the screen
+  /// keeps a paragraph describing a selection nobody has any more.
   Session copyWith({
     CoverageLedger? ledger,
     List<Direction>? directions,
@@ -127,6 +142,8 @@ class Session {
     Integration? integration,
     String? pitch,
     RunManifest? manifest,
+    bool dropIntegration = false,
+    bool dropPitch = false,
   }) => Session(
     id: id,
     taskId: taskId,
@@ -141,11 +158,12 @@ class Session {
     assumptions: assumptions ?? this.assumptions,
     rounds: rounds ?? this.rounds,
     selection: selection ?? this.selection,
-    integration: integration ?? this.integration,
-    pitch: pitch ?? this.pitch,
+    integration: dropIntegration ? null : (integration ?? this.integration),
+    pitch: dropPitch ? '' : (pitch ?? this.pitch),
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
+    'schema': schema,
     'id': id,
     'taskId': taskId,
     'title': title,
