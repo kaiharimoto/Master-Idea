@@ -98,4 +98,25 @@ void main() {
           'is a question again.',
     );
   });
+
+  test('two sessions opened in one clock tick are two sessions', () async {
+    final Library library = Library(inMemory: true);
+    await library.load();
+
+    // No await between them, which on a machine with a coarse clock — every
+    // Windows machine — reads the same microsecond twice.
+    final Session a = await library.begin(interview());
+    final Session b = await library.begin(interview());
+
+    expect(
+      a.id,
+      isNot(b.id),
+      reason:
+          'Two ids minted inside one tick are one id, and the second session '
+          'silently replaces the first in the library. Master Prompt lost a '
+          'mission to exactly this, and the on-disk minter has guarded '
+          'against it since it was written.',
+    );
+    expect(library.sessions, hasLength(2));
+  });
 }

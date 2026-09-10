@@ -72,6 +72,22 @@ class Library extends ChangeNotifier {
   Future<SessionStore> _sessionStore() async =>
       _store ??= SessionStore(await _dir());
 
+  int _lastMinted = 0;
+
+  /// An id for a session that will never touch the disk.
+  ///
+  /// Guarded the same way `SessionStore.mintId` is, and for the same reason:
+  /// a Windows clock has a coarse tick, two ids minted inside one tick are the
+  /// same id, and the second session then silently replaces the first in the
+  /// library. Master Prompt lost a mission to exactly this. The on-disk minter
+  /// has always been careful about it; this one read the clock and hoped.
+  String _mintInMemory() {
+    int micros = DateTime.now().microsecondsSinceEpoch;
+    if (micros <= _lastMinted) micros = _lastMinted + 1;
+    _lastMinted = micros;
+    return 'mem-${micros.toRadixString(36)}';
+  }
+
   Future<void> load() async {
     if (inMemory) {
       _loaded = true;
@@ -137,7 +153,7 @@ class Library extends ChangeNotifier {
     }
 
     final String id = inMemory
-        ? 'mem-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+        ? _mintInMemory()
         : (await _sessionStore()).mintId();
     final String title = SessionTitle.from(interview.brief.restatement);
     final Session session = Session(
