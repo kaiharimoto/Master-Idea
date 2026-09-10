@@ -41,7 +41,7 @@ whether you have to be there.
 
 The engine, headless and provable:
 
-- The council: ten seats, twelve exploration angles, six rating dimensions,
+- The council: eleven seats, twelve exploration angles, six rating dimensions,
   four harness templates, seven domain profiles, fifteen interview modules.
 - Rounds as barriers, with the angles inside a round fanning out concurrently
   and blind to each other, and each direction pipelining through challenge and
@@ -55,7 +55,7 @@ The engine, headless and provable:
 
 And both clients: one Flutter application for Android and Windows, with seven
 regions — interview, sitting, coverage ledger, dossier, assembly, pitch and the
-session library — set in the court archive treatment, updating themselves from
+session library — set in Master Prompt's own treatment, updating themselves from
 the rolling release.
 
 Not yet done: the three reference sessions and the evidence set they are
@@ -93,7 +93,8 @@ packages/mi_core/     The council, the session record, the invariants, the
                       renderers. Pure Dart: no Flutter, no dart:io.
 packages/mi_engine/   The on-disk session store, Claude CLI discovery and
                       invocation, and the headless entry point. dart:io only.
-packages/mi_design/   The court archive treatment. Flutter.
+packages/mi_design/   Master Prompt's design system, plus one reserved
+                      colour for verdicts. Flutter.
 app/                  The Flutter app for Android and Windows.
 docs/decisions/       The contemporaneous decision log, and parity.md, which
                       records every place this build matches Master Prompt's
@@ -101,7 +102,10 @@ docs/decisions/       The contemporaneous decision log, and parity.md, which
 critics/              The ten critic prompts, the closed rating vocabularies
                       and the deduction table, committed before the first
                       review cycle.
-sessions/             Stored sessions. Nothing here needs an account or a
-                      server to reopen.
-evidence/             The fixed artifact set, captured identically every cycle.
+sessions/             Where stored sessions go. Nothing here needs an account
+                      or a server to reopen — and nothing is here yet: the
+                      three reference sessions have not been run.
+evidence/             Where the fixed artifact set will be captured. Also
+                      empty, and for the same reason. `docs/STATUS.md` is the
+                      honest account.
 ```

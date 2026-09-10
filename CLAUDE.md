@@ -153,9 +153,11 @@ that matters being papered over.
 near-monochrome palette, same 8-point grid, same hairline-ruled panels, same
 `MiFocal` shape for a screen that asks one question. The two programs are one
 family, run side by side, and hand work to each other; a different look would
-be a claim that they are unrelated. `treatment_test.dart` checks the tokens
-against the other half's actual numbers rather than against a memory of them,
-so they cannot drift apart one commit at a time.
+be a claim that they are unrelated. `treatment_test.dart` asserts the tokens as
+literals and, where Master Prompt happens to be checked out beside this
+repository, reads its real file and compares. On CI it never is, so the
+literals are what actually run — a memory of the numbers, and worth knowing
+that is what it is.
 
 **One colour is added, and exactly one widget may touch it.**
 `MiColors.verdict` is oxblood, for verdicts and ratings and nothing else — a
@@ -172,7 +174,7 @@ nothing and falls through to the platform sans *silently*, which sets the same
 screen in Roboto on Android and Segoe on Windows with no error anywhere.
 
 **Look at the screens, do not reason about them.**
-`flutter test --tags shots --update-goldens` renders the real regions to
+`flutter test --tags shots --run-skipped --update-goldens` renders the real regions to
 `app/test/shots/`. It found two defects on its first run — a section header
 printing `null /` and a dissent label printing its own interpolation — and
 neither would ever have failed an assertion. The shots are skipped in an

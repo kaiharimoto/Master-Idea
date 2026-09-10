@@ -1,19 +1,15 @@
-# The app is held to the same standard as the packages, and to Flutter's own
-# lints on top of it.
+# The design system, held to the repository's rules and to Flutter's.
 #
-# It was the stock template: `flutter_lints` alone, with none of the strict
-# language modes and none of the extra rules the three packages have had since
-# the first commit — so the largest and least-tested body of code in the
-# repository was the one analysed least. `parity.md` claimed otherwise.
+# There was no file here at all, so the `flutter_lints` dependency in this
+# package's pubspec was inert: none of the Flutter rules it exists for ever
+# ran.
 include:
-  - ../analysis_options.yaml
+  - ../../analysis_options.yaml
   - package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
     - build/**
-    - android/**
-    - windows/**
   language:
     strict-casts: true
     strict-inference: true

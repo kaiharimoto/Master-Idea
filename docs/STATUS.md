@@ -3,17 +3,17 @@
 Where the build actually is. Kept current as part of every change, because it
 is the only thing that tells the next session where we were.
 
-**Last updated:** the session that built both clients and the release
-pipeline — a signed APK and a Windows installer, published to a rolling `dev`
-release that the app updates itself from.
+**Last updated:** the session that walked the whole workflow before shipping —
+the interview, the sitting, the dossier, assembly and the pitch — and fixed
+what that walk found.
 
 ## Done
 
 `packages/mi_core` — the engine, and `packages/mi_engine` — the store, the
 Claude CLI transport and the headless entry point. Both analysed, formatted and
-green: 86 tests and 27.
+green: 105 tests and 48.
 
-- **Families.** Ten council roles, twelve exploration angles, six rating
+- **Families.** Eleven council roles, twelve exploration angles, six rating
   dimensions with six closed ordinal vocabularies, four harness templates,
   seven domain profiles, fifteen interview modules. Every floor in the brief is
   met or exceeded, and `families_test.dart` asserts the distinctness that makes
@@ -26,8 +26,9 @@ green: 86 tests and 27.
 - **The run.** Rounds as barriers; angles concurrent and blind; challenge and
   rating pipelined per direction as it arrives; deduplication and acceptance in
   one synchronous stretch so two converging angles cannot both accept the same
-  proposal; provider limits waited out as pauses and excluded from council
-  time; every model call recorded in a machine-written manifest.
+  proposal; **the session written at every barrier**, so a run killed at hour
+  four loses the round it was in and nothing else; every model call recorded in
+  a machine-written manifest.
 - **The three invariants**, enforced during the run and checkable afterwards by
   `InvariantSuite` against a stored session alone. Twelve negative tests break
   each invariant in turn and prove the suite fails.
@@ -42,13 +43,42 @@ mi run    sessions/ <id>               # deliberate to dryness through the CLI
 mi check  sessions/ [<id>]             # the invariant suite, exit code and all
 mi render sessions/ <id> dossier|ledger|pitch
 mi select sessions/ <id> d-0001 ...    # compute the integration, write the pitch
+mi rm     sessions/ <id>               # delete a stored session
 ```
 
 Every step of that is tested as a real subprocess, because a command whose exit
 code is wrong is a check that silently always passes. The council in those
 tests is a compiled fake binary that refuses what the real one refuses — a
 missing `--print`, an unknown flag, stream-json without `--verbose`, a stdin
-that never reaches EOF.
+that never reaches EOF — and that can be told to hang, to fail without a limit,
+or to report one in any of the wordings a real limit arrives in.
+
+## What the pre-ship walk changed
+
+Recorded here because the reasons are in `docs/decisions/0016`–`0020` and the
+shape of them belongs where the next session will look.
+
+- **A failure is not a pause.** Every non-zero exit from the CLI used to become
+  a twenty-minute rate limit, so a login that had expired cost eighty minutes
+  of silence per turn, dropped the angle, and let the run record itself as
+  having gone dry with nothing in it. A usage limit is now waited out
+  uncapped against a reset ladder whose rung is stored beside the time;
+  anything else ends the sitting with the reason attached, resumably.
+- **The phone can finish a session.** The handover transport refused a second
+  concurrent turn, which killed the first round of every hand-carried sitting;
+  turns queue now. Assembly asked for the CLI directly, so a phone stopped one
+  step short of the pitch; it goes through the same transport as everything
+  else.
+- **The interview survives being interrupted**, its answers can be corrected
+  before the gate, its unknowns withdrawn, and the gate says what it still
+  wants before the button is pressed rather than after. A new seat, the clerk,
+  drafts the restatement and the scale verdict that were previously string
+  concatenation and a keyword search.
+- **A second idea can be convened** without restarting the app, the back
+  gesture steps through the regions instead of leaving, and a session can be
+  deleted.
+- **The output can leave.** Dossier, ledger and pitch all copy and save, and
+  the dossier runs the invariant suite in the app.
 
 ## The seam to Master Prompt
 
@@ -65,13 +95,9 @@ Both clients exist and are built by CI on every push, published to the rolling
 `dev` release: a signed APK and a per-user Windows installer, with the portable
 zip alongside it.
 
-- **`packages/mi_design`** — Master Prompt's design system, adopted whole: the
-  same Inter at the same scale, the same near-monochrome palette, the same
-  hairline-ruled panels and the same `MiFocal` shape for a screen that asks one
-  question. One colour is added, `MiColors.verdict`, an oxblood that exactly
-  one widget may touch. The first treatment was a parchment-and-serif "court
-  archive"; it looked like a different program, which for two halves of one
-  pair is the wrong answer however handsome it is.
+- **`packages/mi_design`** — Master Prompt's design system, adopted whole, plus
+  one added colour: `MiColors.verdict`, an oxblood that exactly one widget may
+  touch.
 - **`app/`** — one Flutter application, two platform folders. Seven regions:
   interview, sitting, coverage ledger, dossier, assembly, pitch, sessions —
   plus settings and the update sheet. The dossier, the ledger and the pitch all
@@ -85,52 +111,35 @@ zip alongside it.
   both produce identical records.
 
 **The clients are published and installable**, at
-<https://github.com/kaiharimoto/Master-Idea/releases/tag/dev> — the APK, the
-Windows installer and the portable zip, replaced wholesale by every green
-push so the page never shows two builds. The APK was built here and its
-certificate checked against the committed key before the first push; the
-installer can only be built on a Windows host, which is what the
-`windows-latest` job is for.
+<https://github.com/kaiharimoto/Master-Idea/releases/tag/dev>. The publish job
+fires from the default branch or any `claude/*` development branch: it used to
+name one branch by name, so every session after the one that wrote it built
+green and published nothing.
 
-Two builds have now gone out through it, which is what let the upgrade itself
-be checked rather than assumed: against the live release page, a copy running
-build 4 is offered build 5 — the APK on Android, the installer on Windows —
-and a copy running build 5 is told it is current.
-
-`release.yml` handles versioned tags the same way, with the app bundle
-alongside the APK. It publishes the installer as well as the zip, which is
-where Master Prompt's own tagged releases quietly drop it.
-
-The update path is verified as far as it can be without a device in hand:
-`published_release_test.dart` runs the real payload GitHub served for that
-release through the app's own reader and asserts it finds the APK on Android,
-prefers the installer over the zip on Windows, reads the build number out of
-the file name, and refuses to offer a build to itself. If the naming in the
-workflow and the patterns in the updater ever drift apart, an installed copy
-silently stops seeing updates forever — that test is what fails first.
+Both workflows now take their version and build number from one script, since
+`github.run_number` counts per workflow and a tagged release was numbered off a
+different counter than the `dev` builds the updater compares it against.
 
 ## Not started
-- **The interview itself.** The gate, the module bank and the composer exist and
-  are tested; what does not exist is the thing that *conducts* an interview —
-  putting a composed module to a person, reading what comes back, and producing
-  the restatement they approve. That is a client job, and it is the first thing
-  the clients need.
+
 - **The three reference sessions**, the evidence set, and the review cycles.
-  All of them wait on the engine and the clients: every artifact must come from
-  a session that actually ran.
+  Every artifact must come from a session that actually ran, and none has.
+  `sessions/` and `evidence/` are empty.
 
 ## Next action
 
 Run the three reference sessions for real, and capture the evidence set from
-them. Everything they need now exists: the clients build, a sitting can be
-driven from either transport, and the dossier, ledger and pitch render from the
-stored files.
+them. Everything they need now exists.
 
-Before that, two things worth doing while the toolchain is fresh: exercise the
-wide layout in a widget test (`tester.view.physicalSize`, since the default
-800×600 is below the 900px gate and leaves the desktop branch uncovered), and
-put a real sitting through the Android handover route end to end rather than
-through a scripted double.
+Two things are worth doing with a real device in hand rather than in a test:
+
+- **Put a whole sitting through the Android handover route.** The queue, the
+  stop, the reply preview and the hand-carried integrator are all covered by
+  widget tests now, but nobody has yet carried two hundred turns by hand and
+  found out what that is actually like.
+- **Provoke a real usage limit on the desktop** and watch the resume. The reset
+  ladder is tested against every wording the fake produces; the real one is the
+  first honest test of whether those wordings are the wordings.
 
 ## Known gaps to watch
 
@@ -139,6 +148,9 @@ through a scripted double.
   runs at the largest tier will need the cartographer naming gaps generously.
   Recorded in decision 0005.
 - The dedup threshold (`jaccard-substance-v1@0.62`) has been exercised only
-  against the scripted council. The first real session is the first honest test
-  of whether it is lax or strict, and changing it means a new rule id rather
-  than an edit.
+  against scripted councils. The first real session is the first honest test of
+  whether it is lax or strict, and changing it means a new rule id rather than
+  an edit.
+- The concurrency bound on the CLI transport defaults to four turns at once.
+  It is a setting, and the right number is a fact about the machine and the
+  provider that only a real run will produce.

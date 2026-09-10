@@ -197,6 +197,22 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
+    // A floor under the window.
+    //
+    // Without one it can be dragged to a few pixels wide, where every region
+    // is a column of overflow errors. Below 900 logical pixels the app is
+    // already in its narrow layout, which is a designed shape; this only
+    // stops it going somewhere nobody designed at all. Scaled by the
+    // monitor's DPI for the same reason the initial size is.
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      double scale_factor = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
+      info->ptMinTrackSize.x = Scale(640, scale_factor);
+      info->ptMinTrackSize.y = Scale(600, scale_factor);
+      return 0;
+    }
+
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {

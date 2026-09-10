@@ -7,8 +7,16 @@ import 'dart:io';
 /// `--dart-define`; a local build falls back to something obviously local
 /// rather than pretending to be a real one.
 abstract final class BuildInfo {
-  /// Marketing version, kept in step with `pubspec.yaml`.
-  static const String version = '0.1.0';
+  /// Marketing version.
+  ///
+  /// Stamped by CI from `pubspec.yaml`, which is the one place it is written.
+  /// It was a hand-maintained copy of a number that also appears in four
+  /// workflow lines: bumping to 0.2.0 meant five edits, and forgetting any one
+  /// of them produced a build that told the client it was something else.
+  static const String version = String.fromEnvironment(
+    'MI_VERSION',
+    defaultValue: '0.1.0',
+  );
 
   /// Where builds come from. Named once so the update feed, the release page
   /// and the diagnostics link cannot drift apart.

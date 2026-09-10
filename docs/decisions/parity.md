@@ -11,8 +11,8 @@ proceeds; a deviation added later is added here at the moment it is made.
 | `mp_core`, pure Dart, no Flutter and no `dart:io` | `mi_core`, same rule | The logic that has to be right during a long unattended run is analysable and testable in seconds without a 2.5 GB SDK |
 | `mp_runner`, `dart:io` only | `mi_engine`, same rule | The process and filesystem work is provable on a Linux runner before any Windows box sees it |
 | Path dependencies, **no pub workspace** | Same | A workspace including the Flutter packages makes `dart pub get` need the Flutter SDK, which breaks CI for the pure packages |
-| `analysis_options.yaml` with strict casts, inference and raw types | Copied verbatim | Same rules, same failures, in both halves |
-| `dart format` as a CI gate on the pure packages | Same | |
+| `analysis_options.yaml` with strict casts, inference and raw types | Copied verbatim, and included by the two Flutter packages as well | Same rules, same failures, in both halves — the app was on the stock Flutter template until this was checked, which made the largest body of code here the least analysed |
+| `dart format` as a CI gate | Same, on all four packages | It was gated on the pure two only, and the Flutter two had drifted |
 | Line-oriented wire format for anything a model writes mid-run (`mpstate`) | The whole council grammar | A truncated line grammar loses one field; a truncated JSON object loses everything |
 | Injected clock, so waits are testable (`RunSupervisor`) | `RunClock` | A limit pause measured in hours cannot be tested against a real clock |
 | One code path to the model, with a fake that refuses what the real one refuses | `CouncilTransport` with `ScriptedCouncil` | A double that accepts everything proves only that the code runs |
@@ -44,7 +44,8 @@ proceeds; a deviation added later is added here at the moment it is made.
 | Deviation | Reason |
 |---|---|
 | The rolling release publishes from the development branch as well as the default branch | This repository has only the one branch, and a build nobody can download is not a build. See decision 0013. |
-| A serif throughout, including controls, where Master Prompt is a grotesque throughout | Different treatments for different tools: this one is a proceeding whose output is a document, and a grotesque interface wrapped around a serif document reads as a web app that renders a PDF. |
+| One added colour: `MiColors.verdict`, an oxblood exactly one widget may paint | A council's entire output is judgement, and a dossier that sets its ratings in the same ink as its prose is one you have to read twice to find them in. The first treatment here was a parchment-and-serif court archive; it looked like a different program, which for two halves of one pair is the wrong answer however handsome it is, and it was replaced by Master Prompt's own system. See decision 0015. |
+| An eleventh seat, the clerk, which sits before the sitting rather than during it | Master Prompt has no interview to restate. See decision 0018. |
 | The phone transport is a hand-carried council rather than a copy-paste interview | The same difference in the other direction: Master Prompt's phone route carries *questions* to a chat, and this one carries *seats*. Both are the same `CouncilTransport` the desktop uses, so neither client is a port of the other. |
 
 ## The Android autonomy limit
@@ -56,7 +57,12 @@ turn goes out by hand and comes back by hand. The sitting screen says so, and
 the release notes say so.
 
 Everything else is reachable on both clients: interview, sitting, coverage
-ledger, dossier, assembly, pitch and the session library.
+ledger, dossier, assembly, pitch and the session library. Assembly was the
+exception until this was checked — it asked for the CLI directly, so a phone
+could interview, sit and read a dossier and then stop one step short of the
+pitch its whole session exists to produce. It now goes through the same
+transport as every other turn, which on a phone means one more turn carried by
+hand.
 
 ## Added when the engine was built
 

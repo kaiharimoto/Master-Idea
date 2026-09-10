@@ -68,6 +68,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the build number
+        run: .github/build-number.sh
 
       - uses: actions/setup-java@v4
         with:
@@ -87,6 +92,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
+          dart format --output=none --set-exit-if-changed .
           flutter test
 
       - name: Resolve, analyse, test
@@ -94,6 +100,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
+          dart format --output=none --set-exit-if-changed .
           flutter test
 
       # The version code has to rise with every build, or Android treats a new
@@ -103,14 +110,14 @@ jobs:
       # so that is what gets stamped.
       - name: Stamp the build number into the version
         run: |
-          sed -i "s/^version: .*/version: 0.1.0+${{ github.run_number }}/" app/pubspec.yaml
+          sed -i "s/^version: .*/version: ${{ env.MI_VERSION }}+${{ env.MI_BUILD }}/" app/pubspec.yaml
           grep '^version:' app/pubspec.yaml
 
       - name: Build release APK
         working-directory: app
         run: |
           flutter build apk --release \
-            --dart-define=MI_BUILD=${{ github.run_number }} \
+            --dart-define=MI_BUILD=${{ env.MI_BUILD }} --dart-define=MI_VERSION=${{ env.MI_VERSION }} \
             --dart-define=MI_SHA=${{ github.sha }}
 
       # Asserted rather than trusted: every build must carry the same
@@ -136,7 +143,7 @@ jobs:
         run: |
           mkdir -p out
           cp app/build/app/outputs/flutter-apk/app-release.apk \
-             "out/MasterIdea-${{ github.run_number }}-$(echo ${{ github.sha }} | cut -c1-7).apk"
+             "out/MasterIdea-${{ env.MI_BUILD }}-$(echo ${{ github.sha }} | cut -c1-7).apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -149,6 +156,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the build number
+        shell: bash
+        run: .github/build-number.sh
 
       - uses: subosito/flutter-action@v2
         with:
@@ -161,6 +174,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
+          dart format --output=none --set-exit-if-changed .
           flutter test
 
       # The build number has to reach the exe's VERSIONINFO, not just the Dart
@@ -175,7 +189,7 @@ jobs:
         run: |
           $p = "app/pubspec.yaml"
           (Get-Content $p) -replace '^version: .*$', `
-            'version: 0.1.0+${{ github.run_number }}' | Set-Content $p
+            'version: ${{ env.MI_VERSION }}+${{ env.MI_BUILD }}' | Set-Content $p
           Select-String -Path $p -Pattern '^version:'
 
       # The only place a Windows binary can be produced — Flutter desktop needs
@@ -185,7 +199,7 @@ jobs:
         working-directory: app
         run: |
           flutter build windows --release `
-            --dart-define=MI_BUILD=${{ github.run_number }} `
+            --dart-define=MI_BUILD=${{ env.MI_BUILD }} --dart-define=MI_VERSION=${{ env.MI_VERSION }} `
             --dart-define=MI_SHA=${{ github.sha }}
 
       - name: Ensure Inno Setup
@@ -206,10 +220,10 @@ jobs:
           $sha = "${{ github.sha }}".Substring(0,7)
           New-Item -ItemType Directory -Force -Path out | Out-Null
           & "$env:ISCC" `
-            "/DAppVersion=0.1.0.${{ github.run_number }}" `
+            "/DAppVersion=${{ env.MI_VERSION }}.${{ env.MI_BUILD }}" `
             "/DBuildDir=..\..\build\windows\x64\runner\Release" `
             "/DOutputDir=..\..\..\out" `
-            "/DOutputBase=MasterIdeaSetup-${{ github.run_number }}-$sha" `
+            "/DOutputBase=MasterIdeaSetup-${{ env.MI_BUILD }}-$sha" `
             "app\windows\installer\master_idea.iss"
           Get-ChildItem out
 
@@ -220,7 +234,7 @@ jobs:
         run: |
           $sha = "${{ github.sha }}".Substring(0,7)
           Compress-Archive -Path "app/build/windows/x64/runner/Release/*" `
-            -DestinationPath "out/MasterIdea-windows-x64-${{ github.run_number }}-$sha.zip"
+            -DestinationPath "out/MasterIdea-windows-x64-${{ env.MI_BUILD }}-$sha.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -228,6 +242,38 @@ jobs:
           path: |
             out/*.exe
             out/*.zip
+          retention-days: 14
+
+  # The screens, rendered.
+  #
+  # Never compared: font rasterisation differs between machines and a pixel
+  # diff on a runner goes red for reasons that have nothing to do with the
+  # design. What this catches is the other thing — a region that throws while
+  # rendering, which no assertion in the suite would notice because the shots
+  # are skipped by default. They are uploaded so a change to a screen can be
+  # looked at rather than argued about.
+  shots:
+    name: The screens render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Render them
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter test --tags shots --run-skipped --update-goldens
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots
+          path: app/test/shots/*.png
           retention-days: 14
 
   judgeset:
@@ -259,19 +305,33 @@ jobs:
 
   publish-dev:
     name: Publish the rolling dev build
-    needs: [core, engine, android, windows]
+    needs: [core, engine, android, windows, judgeset]
     # Real pushes only, and only from a branch builds are meant to come from.
     # The default branch is the usual answer; until this repository has one
     # with anything on it, the development branch is where installable builds
     # come from and a build nobody can download is not a build.
+    # Real pushes only, from the default branch or any development branch.
+    # Pinning one branch name meant every session after the one that wrote it
+    # built green and published nothing, while the release page users are told
+    # to bookmark kept serving a build from weeks ago — and an installed copy
+    # that stops seeing updates says nothing about it. See decision 0013.
     if: >-
       github.event_name != 'pull_request' &&
       (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
-       github.ref == 'refs/heads/claude/zen-ride-jgmc8m')
+       startsWith(github.ref, 'refs/heads/claude/'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # Checked out for the build number alone: the release notes name it, and
+      # it has to be the same number the artifacts were built with.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the build number
+        run: .github/build-number.sh
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -281,16 +341,13 @@ jobs:
       # Without this the page accumulates every build and you have to work out
       # which one is newest — exactly the guessing the release notes promise
       # you will not have to do.
-      - name: Remove the previous build's assets
+      - name: Note which assets are already there
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ids=$(gh api "repos/${{ github.repository }}/releases/tags/dev" \
-                  --jq '.assets[].id' 2>/dev/null || true)
-          for id in $ids; do
-            echo "removing asset $id"
-            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id" || true
-          done
+          gh api "repos/${{ github.repository }}/releases/tags/dev" \
+            --jq '.assets[] | "\(.id) \(.name)"' 2>/dev/null > /tmp/old-assets.txt || true
+          cat /tmp/old-assets.txt || true
 
       - name: Publish
         uses: softprops/action-gh-release@v2
@@ -307,7 +364,7 @@ jobs:
 
             | | |
             |---|---|
-            | Build | `${{ github.run_number }}` |
+            | Build | `${{ env.MI_BUILD }}` |
             | Commit | [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |
 
             **Android** — download the `.apk` and open it. The first time,
@@ -337,3 +394,18 @@ jobs:
             artifacts/android/*.apk
             artifacts/windows/*.exe
             artifacts/windows/*.zip
+
+      # After the upload, never before it. Assets carry their build number, so
+      # a new build adds files rather than replacing them and the page would
+      # otherwise accumulate every build ever made — but deleting first leaves
+      # a window where the page users are told to bookmark has nothing on it
+      # at all, and an upload that fails in that window leaves it that way.
+      - name: Remove the previous build's assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [ -s /tmp/old-assets.txt ] || exit 0
+          while read -r id name; do
+            echo "removing $name ($id)"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id" || true
+          done < /tmp/old-assets.txt

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:master_idea/src/screens/interview_proceeding.dart';
 import 'package:master_idea/src/store/library.dart';
 import 'package:master_idea/src/store/sitting.dart';
-import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import 'support/scripted_council.dart';
