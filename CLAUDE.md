@@ -77,6 +77,31 @@ decision is never made on a narrower round. A provider limit is a `CouncilPaused
 exception, never an empty reply: an empty reply is evidence of dryness and a
 rate limit is the opposite of evidence.
 
+## Three exceptions, and why they are three
+
+`CouncilPaused`, `CouncilStopped` and `CouncilUnavailable` are not degrees of
+the same thing, and collapsing any two of them has already cost a sitting each.
+
+**A limit is waited out, uncapped.** It always lifts. The resume time comes off
+a ladder in `LimitReader` — an epoch, a stated delay, a stated clock time, the
+five-hour block this sitting began in, then a labelled guess — and the rung is
+stored beside the time in the manifest, because a guess that reads like a fact
+is how a run comes back early and pauses again.
+
+**A stop is the client**, and it ends the run at once. Signalled as a pause it
+was waited out and retried, so the same turn came back on screen while the
+interface believed the sitting had ended.
+
+**Anything else fails the sitting, loudly**, with what the CLI said attached.
+Not logged in, an unknown model, a missing binary: none lift by waiting, and
+waiting them out drops every angle and then records the run as dry with an
+empty dossier. Failing is only tolerable because **`CouncilRun` writes through
+`onBarrier` as each round closes** — every caller passes a saver, so an
+interrupted sitting resumes from the barrier it reached rather than restarting.
+A resumed run seeds its direction ids from what is stored; without that it
+mints `d-0001` over a direction the session already holds, and the store, which
+writes a rating file once and never rewrites it, drops the new verdicts.
+
 ## Traps, all of them found the hard way
 
 **The accept path must not contain an `await`.** Angles run concurrently and a
@@ -149,6 +174,18 @@ identical records — but six hours of it is six hours of a person copying, and
 claiming the desktop's autonomy for that would be the one platform difference
 that matters being papered over.
 
+**Turns queue there; they are never refused.** A round fans out four angles at
+the smallest tier and pipelines every direction, so a second turn is always in
+the air. Answering it with an error ended the sitting, because an error is not
+a pause. **Breadth is not narrowed for the phone**: the transport decides how a
+turn travels, never how wide the council looks, or 'ran dry' would mean
+different things on the two clients that write the same word into the same
+manifest.
+
+**A hand-carried reply is parsed before it is accepted.** The run cannot tell a
+truncated paste from a seat with nothing left to say, and one of those is what
+takes a run to dryness.
+
 **The design system is Master Prompt's, deliberately.** Same Inter, same
 near-monochrome palette, same 8-point grid, same hairline-ruled panels, same
 `MiFocal` shape for a screen that asks one question. The two programs are one
@@ -203,6 +240,20 @@ for anything about storage.
 every test here exercises the narrow layout unless it sets
 `tester.view.physicalSize`. The wide branch of `home.dart` is uncovered
 otherwise, and that is the branch a desktop actually runs.
+
+**The interview is conducted, and it is not frozen until the gate closes.**
+Every answer goes to `draft.json` as it is given, so an app the phone reclaims
+in the background does not cost fifteen answers; answers can be taken back;
+declared unknowns can be withdrawn; and the gate's refusals are on screen while
+they still apply rather than after the button. After the gate, nothing may
+re-elicit an answer — that is what the sitting depends on.
+
+**The clerk drafts the brief, and the client's edit outranks it.** One turn,
+before the sitting opens, producing the restatement and the scale verdict. The
+composed draft (`InterviewCounsel.compose`) is what the client sees
+immediately and what a device with no council falls back to. Once they have
+touched the field nothing overwrites it: their approval is what makes it
+constitution.
 
 ## Conventions
 

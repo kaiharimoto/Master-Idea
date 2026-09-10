@@ -6,6 +6,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_engine/mi_engine.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../transport/council_session.dart';
 import 'diagnostics.dart';
 import 'settings.dart';
 
@@ -149,7 +150,10 @@ class Library extends ChangeNotifier {
         sessionId: id,
         templateId: interview.verdict.templateId,
         tier: interview.verdict.template.tier,
-        transport: 'cli',
+        // What this device could do, if it ran now. The sitting writes the
+        // route it actually took when it opens, because a session can be
+        // created on one of these clients and run on the other.
+        transport: canDriveCouncil ? 'cli' : 'handover',
         startedAt: DateTime.now().toUtc(),
       ),
     );
