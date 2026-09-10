@@ -1,0 +1,180 @@
+name: Release
+
+# Android and Windows ship together from one tag, so a version is never
+# available on one platform and not the other. Day-to-day builds come from the
+# rolling `dev` prerelease in ci.yml; this is for versioned milestones.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.0)'
+        required: true
+
+env:
+  FLUTTER_VERSION: '3.47.2'
+  DEV_KEY_SHA256: '618b2260d0c48fb11b80e0046f41b9e749f13a989060207a14e9d7e9e62de4e4'
+
+jobs:
+  verify:
+    name: Verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - working-directory: packages/mi_core
+        run: dart pub get && dart analyze && dart test
+      - working-directory: packages/mi_engine
+        run: dart pub get && dart analyze && dart test
+
+  android:
+    name: Android
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Stamp the build number into the version
+        run: |
+          sed -i "s/^version: .*/version: 0.1.0+${{ github.run_number }}/" app/pubspec.yaml
+          grep '^version:' app/pubspec.yaml
+
+      # Signed with the committed dev key, exactly like the rolling builds, so
+      # a tagged build installs over one of those without an uninstall. If this
+      # ever goes to the Play Store it needs a fresh key kept out of the
+      # repository — see the note in app/android/.gitignore.
+      - name: Build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build apk --release \
+            --dart-define=MI_BUILD=${{ github.run_number }} \
+            --dart-define=MI_SHA=${{ github.sha }}
+          flutter build appbundle --release \
+            --dart-define=MI_BUILD=${{ github.run_number }} \
+            --dart-define=MI_SHA=${{ github.sha }}
+
+      - name: Verify the APK is signed with the dev key
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          APK=app/build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/certs.txt
+          ACTUAL=$(grep -i 'SHA-256 digest' /tmp/certs.txt | head -1 | awk '{print $NF}' | tr 'A-Z' 'a-z')
+          if [ "$ACTUAL" != "$DEV_KEY_SHA256" ]; then
+            echo "::error::APK is not signed with the committed dev key."
+            exit 1
+          fi
+
+      # The updater recognises builds by filename, so an asset that does not
+      # match its patterns is invisible to every installed copy.
+      - name: Name the artifacts
+        run: |
+          mkdir -p out
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          cp app/build/app/outputs/flutter-apk/app-release.apk \
+             "out/MasterIdea-${{ github.run_number }}-$SHA.apk"
+          cp app/build/app/outputs/bundle/release/*.aab out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*
+
+  windows:
+    name: Windows
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Stamp the build number into the version
+        shell: pwsh
+        run: |
+          $p = "app/pubspec.yaml"
+          (Get-Content $p) -replace '^version: .*$', `
+            'version: 0.1.0+${{ github.run_number }}' | Set-Content $p
+
+      - name: Build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build windows --release `
+            --dart-define=MI_BUILD=${{ github.run_number }} `
+            --dart-define=MI_SHA=${{ github.sha }}
+
+      - name: Ensure Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe still not at $iscc" }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build the installer and the portable zip
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}".Substring(0,7)
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          & "$env:ISCC" `
+            "/DAppVersion=0.1.0.${{ github.run_number }}" `
+            "/DBuildDir=..\..\build\windows\x64\runner\Release" `
+            "/DOutputDir=..\..\..\out" `
+            "/DOutputBase=MasterIdeaSetup-${{ github.run_number }}-$sha" `
+            "app\windows\installer\master_idea.iss"
+          Compress-Archive -Path "app/build/windows/x64/runner/Release/*" `
+            -DestinationPath "out/MasterIdea-windows-x64-${{ github.run_number }}-$sha.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            out/*.exe
+            out/*.zip
+
+  publish:
+    name: Publish one release with both platforms
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # The installer is listed here as well as the zip. A tagged release that
+      # published only the zip would be a step backwards from the rolling one
+      # for every Windows user, and the updater would fall back to the shape
+      # that cannot replace a running program.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/android/**/*.apk
+            artifacts/android/**/*.aab
+            artifacts/windows/*.exe
+            artifacts/windows/*.zip

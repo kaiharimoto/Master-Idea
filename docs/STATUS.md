@@ -81,12 +81,22 @@ zip alongside it.
   where every turn is carried by hand. Both are the same `CouncilTransport`, so
   both produce identical records.
 
-**Build 4 is published and installable**, at
+**The clients are published and installable**, at
 <https://github.com/kaiharimoto/Master-Idea/releases/tag/dev> — the APK, the
-Windows installer and the portable zip. The APK was built here and its
+Windows installer and the portable zip, replaced wholesale by every green
+push so the page never shows two builds. The APK was built here and its
 certificate checked against the committed key before the first push; the
 installer can only be built on a Windows host, which is what the
 `windows-latest` job is for.
+
+Two builds have now gone out through it, which is what let the upgrade itself
+be checked rather than assumed: against the live release page, a copy running
+build 4 is offered build 5 — the APK on Android, the installer on Windows —
+and a copy running build 5 is told it is current.
+
+`release.yml` handles versioned tags the same way, with the app bundle
+alongside the APK. It publishes the installer as well as the zip, which is
+where Master Prompt's own tagged releases quietly drop it.
 
 The update path is verified as far as it can be without a device in hand:
 `published_release_test.dart` runs the real payload GitHub served for that
