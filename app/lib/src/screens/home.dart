@@ -198,16 +198,23 @@ class _HomeScreenState extends State<HomeScreen> {
     // On a wide window a region opens in the content pane rather than as a
     // pushed route. A push covers the rail too, which turns a 1600px window
     // into a phone page and takes the session list with it.
-    return Scaffold(
-      backgroundColor: c.canvas,
-      body: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            SizedBox(width: MiSpace.railWidth, child: _rail(open)),
-            Container(width: 1, color: c.line),
-            Expanded(child: content),
-          ],
+    //
+    // Escape steps back the same way the system gesture does on a phone, which
+    // is what a desktop user will try. `MiEscape` has existed in the design
+    // system since it was written and had no caller.
+    return MiEscape(
+      onEscape: _back,
+      child: Scaffold(
+        backgroundColor: c.canvas,
+        body: SafeArea(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SizedBox(width: MiSpace.railWidth, child: _rail(open)),
+              Container(width: 1, color: c.line),
+              Expanded(child: content),
+            ],
+          ),
         ),
       ),
     );

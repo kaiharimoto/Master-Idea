@@ -139,4 +139,45 @@ void main() {
       reason: 'A typo in the run\'s licence used to be permanent.',
     );
   });
+
+  testWidgets('the clerk can be asked by hand where there is no CLI', (
+    WidgetTester tester,
+  ) async {
+    final (Library library, InterviewDraft draft) = await proceeding(
+      tester,
+      canDrive: false,
+    );
+
+    await tester.tap(find.text('Essay or argument'));
+    await tester.pumpAndSettle();
+    while (draft.pending != null) {
+      await tester.enterText(
+        find.byType(TextField).first,
+        'What the client said about this, at some length and specifically.',
+      );
+      await tester.tap(find.text('Record'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(
+      find.textContaining('Composed from your answers'),
+      findsOneWidget,
+      reason:
+          'The tool moves first: a paragraph to correct, never an empty box, '
+          'and never a wait before there is anything on screen.',
+    );
+
+    await tester.tap(find.text('Ask the council'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Copy this turn'),
+      findsOneWidget,
+      reason:
+          'On a phone the clerk is one more turn carried by hand — offered, '
+          'not automatic, because it comes before the client has agreed to '
+          'carry hundreds.',
+    );
+  });
 }
