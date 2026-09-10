@@ -209,13 +209,22 @@ abstract final class LedgerRenderer {
       final int exhausted = r.returns
           .where((AngleReturn a) => a.exhausted)
           .length;
+      // Lines nobody could read are named beside the round they were in. An
+      // angle that said nothing and an angle whose reply was unreadable are
+      // the difference between a run that finished and a run that was ended
+      // by a parser, and only one of them is dryness.
+      final int unread = r.returns.fold(
+        0,
+        (int n, AngleReturn a) => n + a.unread.length,
+      );
       b.add(
         DocBlock(
           BlockKind.item,
           'Round ${r.number}: ${r.breadth} angles, $proposed proposed, '
           '${r.newDirectionIds.length} kept, ${r.rejections.length} already '
           'held'
-          '${exhausted == 0 ? '' : ', $exhausted angle(s) exhausted'}.',
+          '${exhausted == 0 ? '' : ', $exhausted angle(s) exhausted'}'
+          '${unread == 0 ? '' : ', $unread line(s) unreadable'}.',
         ),
       );
     }

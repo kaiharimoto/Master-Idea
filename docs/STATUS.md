@@ -11,7 +11,10 @@ what that walk found.
 
 `packages/mi_core` — the engine, and `packages/mi_engine` — the store, the
 Claude CLI transport and the headless entry point. Both analysed, formatted and
-green: 105 tests and 48.
+green: 108 tests and 50. The clients are analysed, formatted and green too:
+14 in `mi_design` and 52 in `app`, where there were 30 before this walk and
+none at all over the sitting, the assembly or the interview past its second
+question.
 
 - **Families.** Eleven council roles, twelve exploration angles, six rating
   dimensions with six closed ordinal vocabularies, four harness templates,

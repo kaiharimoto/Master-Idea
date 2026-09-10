@@ -75,9 +75,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       final String said = reply.text.trim().split('\n').first;
       setState(
-        () => _probe =
-            'It answered: ${said.isEmpty ? '(nothing)' : said}. '
-            '${s.install.capabilities.version} at ${s.install.path}.',
+        () => _probe = <String>[
+          'It answered: ${said.isEmpty ? '(nothing)' : said}.',
+          '${s.install.capabilities.version} at ${s.install.path}.',
+          // What this build of the CLI could not do and what was used
+          // instead. The commonest one costs the manifest its token figures
+          // for a whole run, and it was recorded nowhere anybody would look.
+          ...s.council.notes,
+        ].join(' '),
       );
     } on NoCouncil catch (e) {
       setState(() => _probe = '$e');
