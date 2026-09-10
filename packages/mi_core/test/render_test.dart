@@ -137,4 +137,54 @@ void main() {
       expect(text, contains(dry.dedupRuleId));
     });
   });
+
+  group('the ledger accounts for the run itself', () {
+    test('council time, the route, and what each round yielded', () async {
+      final Session s = await ranSession();
+      final String text = LedgerRenderer.render(s).toText();
+
+      expect(
+        text,
+        contains('HOW THIS RUN WAS CONDUCTED'),
+        reason:
+            'The manifest records the one number that separates a real '
+            'six-hour sitting from a six-hour wait, and it reached no page at '
+            'all — only somebody willing to read run_manifest.json by hand.',
+      );
+      expect(text, contains('council time'));
+      expect(text, contains('model calls'));
+      expect(
+        text,
+        contains('Round 1:'),
+        reason:
+            'Proposed against kept is the difference between a round that '
+            'searched and a round that repeated itself.',
+      );
+    });
+
+    test('a pause says how long it was and how the time was arrived at', () {
+      final Session paused = referenceSession().copyWith(
+        manifest: referenceSession().manifest.paused(
+          LimitPause(
+            from: DateTime.utc(2026, 3, 1, 9),
+            until: DateTime.utc(2026, 3, 1, 14),
+            kind: 'session',
+            detail: 'usage limit reached',
+            source: 'inferred',
+          ),
+        ),
+      );
+
+      final String text = LedgerRenderer.render(paused).toText();
+      expect(text, contains('5 hours'));
+      expect(
+        text,
+        contains('inferred'),
+        reason:
+            'A resume time that was guessed and one the provider stated are '
+            'worth different amounts to whoever reads this afterwards.',
+      );
+      expect(text, contains('Excluded from council time'));
+    });
+  });
 }

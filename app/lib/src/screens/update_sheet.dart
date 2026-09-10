@@ -16,8 +16,13 @@ import '../update/updater.dart';
 Future<void> showUpdateSheet(BuildContext context, Updater updater) {
   final MiColors c = MiTheme.colorsOf(context);
   // Checking on open rather than on a button: the sheet exists because someone
-  // wants to know, and making them ask twice is a step for nothing.
-  if (!updater.busy) unawaited(updater.runCheck());
+  // wants to know, and making them ask twice is a step for nothing. The error
+  // from last time goes first — it was never cleared, so a failure from an
+  // hour ago sat above a check that had since succeeded.
+  if (!updater.busy) {
+    updater.clearError();
+    unawaited(updater.runCheck());
+  }
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: c.surfaceRaised,

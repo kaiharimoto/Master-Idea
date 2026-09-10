@@ -435,13 +435,8 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
 
   /// A module id the running build may not know, because the draft on disk was
   /// written by another one.
-  static String _nameOf(String moduleId) {
-    try {
-      return moduleById(moduleId).name;
-    } on ArgumentError {
-      return moduleId;
-    }
-  }
+  static String _nameOf(String moduleId) =>
+      moduleByIdOrNull(moduleId)?.name ?? moduleId;
 
   List<Widget> _question(MiColors c, InterviewDraft d, InterviewModule m) {
     // The medium is the one question with a fixed set of answers, because it

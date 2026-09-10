@@ -11,7 +11,7 @@ class Settings {
     this.themeMode = ThemeMode.system,
     this.claudePath = '',
     this.model = '',
-    this.pasteLimit = 12000,
+    this.concurrentTurns = 4,
   });
 
   final ThemeMode themeMode;
@@ -28,29 +28,33 @@ class Settings {
   /// so a bad value cannot be caught before it fails a turn.
   final String model;
 
-  /// How much text the receiving chat app will accept in one paste.
+  /// How many turns the council may have in the air at once.
   ///
-  /// A setting because nothing can probe the real ceiling, and only the person
-  /// holding the phone can find it.
-  final int pasteLimit;
+  /// A round at the largest tier fans out twelve angles and pipelines every
+  /// direction through challenge and rating: some fifty `claude` processes
+  /// together on a laptop, which is itself the commonest way to provoke the
+  /// limits a run then has to wait out. **Not a stop condition** — it decides
+  /// how many turns are travelling, never how wide the council searches, and
+  /// nothing here can end a round or a run.
+  final int concurrentTurns;
 
   Settings copyWith({
     ThemeMode? themeMode,
     String? claudePath,
     String? model,
-    int? pasteLimit,
+    int? concurrentTurns,
   }) => Settings(
     themeMode: themeMode ?? this.themeMode,
     claudePath: claudePath ?? this.claudePath,
     model: model ?? this.model,
-    pasteLimit: pasteLimit ?? this.pasteLimit,
+    concurrentTurns: concurrentTurns ?? this.concurrentTurns,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
     'claudePath': claudePath,
     'model': model,
-    'pasteLimit': pasteLimit,
+    'concurrentTurns': concurrentTurns,
   };
 
   static Settings fromJson(Map<String, Object?> j) => Settings(
@@ -60,6 +64,6 @@ class Settings {
     ),
     claudePath: '${j['claudePath'] ?? ''}',
     model: '${j['model'] ?? ''}',
-    pasteLimit: (j['pasteLimit'] as num?)?.toInt() ?? 12000,
+    concurrentTurns: (j['concurrentTurns'] as num?)?.toInt() ?? 4,
   );
 }

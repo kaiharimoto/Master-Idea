@@ -143,7 +143,9 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
               ),
               const SizedBox(height: MiSpace.sm),
               Text(
-                '${MiSubmit.hintFor(context)}, or the button below.',
+                widget.library.isLoaded
+                    ? '${MiSubmit.hintFor(context)}, or the button below.'
+                    : 'Reading what is already on this device…',
                 style: MiType.caption.copyWith(color: c.inkFaint),
               ),
             ],
@@ -157,13 +159,23 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
           disclosures: <Widget>[
             MiDisclosure(
               label: 'Sessions already before the council',
-              trailingNote: widget.library.isEmpty
+              trailingNote: widget.library.problem != null
+                  ? 'unreadable'
+                  : widget.library.isEmpty
                   ? 'none yet'
                   : '${widget.library.sessions.length}',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  if (widget.library.isEmpty)
+                  if (widget.library.problem != null)
+                    Text(
+                      'The stored sessions could not be read on this device: '
+                      '${widget.library.problem}. Nothing has been lost — the '
+                      'files are where they were — but this copy cannot open '
+                      'them. Settings has the diagnostics to send.',
+                      style: MiType.prose.copyWith(color: c.warning),
+                    )
+                  else if (widget.library.isEmpty)
                     Text(
                       'Nothing has been put before the council on this device '
                       'yet. Every session is kept here as plain files, with no '

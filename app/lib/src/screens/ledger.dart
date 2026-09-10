@@ -11,19 +11,29 @@ import '../widgets/document_view.dart';
 /// council, no key and no network — a month later, on a machine that has never
 /// run a sitting.
 class LedgerScreen extends StatelessWidget {
-  const LedgerScreen({required this.session, super.key});
+  const LedgerScreen({required this.session, this.onOpenSitting, super.key});
 
   final Session session;
+
+  /// Where an empty map leads.
+  final VoidCallback? onOpenSitting;
 
   @override
   Widget build(BuildContext context) {
     if (session.ledger.territories.isEmpty) {
-      return const MiEmpty(
+      return MiEmpty(
         title: 'Nothing has been mapped yet',
         detail:
             'The cartographer draws the map at each barrier, so it fills as '
             'the sitting runs. Its edges are the point: what was entered, what '
             'was deliberately left, and what is still open.',
+        action: onOpenSitting == null
+            ? null
+            : MiButton(
+                label: 'Go to the sitting',
+                kind: MiButtonKind.primary,
+                onPressed: onOpenSitting,
+              ),
       );
     }
     final MiDocument document = LedgerRenderer.render(session);

@@ -3,6 +3,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../store/naming.dart';
 
 /// The interview as it closed: frozen, and readable forever.
 ///
@@ -69,13 +70,10 @@ class InterviewScreen extends StatelessWidget {
             const SizedBox(height: MiSpace.lg),
             Text('The sitting', style: MiType.title.copyWith(color: c.ink)),
             const SizedBox(height: MiSpace.xs),
-            MiRecord(
-              label: r.verdict.template.name,
-              value: r.verdict.reasoning,
-            ),
+            MiRecord(label: tierName(r.verdict), value: r.verdict.reasoning),
             MiRecord(
               label: 'Expected',
-              value: r.verdict.template.expectation,
+              value: tierExpectation(r.verdict),
               style: MiType.caption,
             ),
             const SizedBox(height: MiSpace.xl),
@@ -94,7 +92,10 @@ class InterviewScreen extends StatelessWidget {
             ),
             const SizedBox(height: MiSpace.md),
             for (final InterviewAnswer a in r.answers) ...<Widget>[
-              MiRecord(label: moduleById(a.moduleId).name, value: a.text),
+              MiRecord(
+                label: moduleByIdOrNull(a.moduleId)?.name ?? a.moduleId,
+                value: a.text,
+              ),
               const SizedBox(height: MiSpace.xs),
               MiRule(),
             ],

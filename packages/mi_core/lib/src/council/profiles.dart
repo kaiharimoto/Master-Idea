@@ -206,3 +206,17 @@ DomainProfile profileById(String id) => domainProfiles.firstWhere(
   (DomainProfile p) => p.id == id,
   orElse: () => throw ArgumentError.value(id, 'id', 'no such domain profile'),
 );
+
+/// The same, or null.
+///
+/// For the places that only need to *print* a name: a session written by
+/// another build, or read out of files a person edited, can name something
+/// this catalog does not have — and a lookup that throws while a list is
+/// being built takes the whole screen down, including every other session on
+/// it. A run may still demand the strict one.
+DomainProfile? profileByIdOrNull(String id) {
+  for (final DomainProfile p in domainProfiles) {
+    if (p.id == id) return p;
+  }
+  return null;
+}

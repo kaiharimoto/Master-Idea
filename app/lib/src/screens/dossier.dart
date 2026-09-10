@@ -13,18 +13,28 @@ import '../widgets/document_view.dart';
 /// place all of that is visible at once — or visibly absent, which is the
 /// point of putting it in one frame.
 class DossierScreen extends StatelessWidget {
-  const DossierScreen({required this.session, super.key});
+  const DossierScreen({required this.session, this.onOpenSitting, super.key});
 
   final Session session;
+
+  /// Where an empty case file leads.
+  final VoidCallback? onOpenSitting;
 
   @override
   Widget build(BuildContext context) {
     if (session.directions.isEmpty) {
-      return const MiEmpty(
+      return MiEmpty(
         title: 'The case file is empty',
         detail:
             'Nothing is written here that a seat did not say, so it fills as '
             'the council proposes and rates rather than at the end.',
+        action: onOpenSitting == null
+            ? null
+            : MiButton(
+                label: 'Go to the sitting',
+                kind: MiButtonKind.primary,
+                onPressed: onOpenSitting,
+              ),
       );
     }
     final MiDocument document = DossierRenderer.render(session);

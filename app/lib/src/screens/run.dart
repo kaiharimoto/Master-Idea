@@ -3,6 +3,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../store/naming.dart';
 import '../store/sitting.dart';
 import '../widgets/carry_panel.dart';
 
@@ -86,8 +87,8 @@ class RunScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 MiSectionHeader(
-                  title: open.interview.verdict.template.name,
-                  subtitle: open.interview.verdict.template.expectation,
+                  title: tierName(open.interview.verdict),
+                  subtitle: tierExpectation(open.interview.verdict),
                   trailing: MiTag(
                     _status(sitting, elsewhere: elsewhere),
                     tone: switch (sitting.phase) {

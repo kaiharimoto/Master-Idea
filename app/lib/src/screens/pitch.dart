@@ -13,10 +13,19 @@ import '../widgets/document_actions.dart';
 /// part is a small line-oriented block at the end, which is what lets Master
 /// Prompt open a mission from this without anything being retyped.
 class PitchScreen extends StatelessWidget {
-  const PitchScreen({required this.library, required this.session, super.key});
+  const PitchScreen({
+    required this.library,
+    required this.session,
+    required this.onOpenAssembly,
+    super.key,
+  });
 
   final Library library;
   final Session session;
+
+  /// An empty state that names the next step and cannot reach it is a dead
+  /// end with better manners.
+  final VoidCallback onOpenAssembly;
 
   @override
   Widget build(BuildContext context) {
@@ -25,12 +34,17 @@ class PitchScreen extends StatelessWidget {
     final String pitch = s.pitch;
 
     if (pitch.isEmpty) {
-      return const MiEmpty(
+      return MiEmpty(
         title: 'There is no pitch yet',
         detail:
             'Select directions in Assembly and have the council compute what '
             'they become together. The pitch is made of that, and of nothing '
-            'the client did not choose.',
+            'you did not choose.',
+        action: MiButton(
+          label: 'Go to Assembly',
+          kind: MiButtonKind.primary,
+          onPressed: onOpenAssembly,
+        ),
       );
     }
 

@@ -69,6 +69,7 @@ Future<CouncilSession> openCouncil({
       install: install,
       workingDirectory: scratch.path,
       model: settings.model.trim().isEmpty ? null : settings.model.trim(),
+      maxConcurrent: settings.concurrentTurns,
     ),
   );
 }

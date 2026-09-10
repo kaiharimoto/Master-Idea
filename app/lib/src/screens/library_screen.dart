@@ -5,6 +5,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../store/naming.dart';
 import '../store/sitting.dart';
 import '../widgets/counts.dart';
 
@@ -167,7 +168,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                   runSpacing: MiSpace.xs,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: <Widget>[
-                                    MiTag(s.interview.verdict.template.name),
+                                    MiTag(tierName(s.interview.verdict)),
                                     MiTag(
                                       s.manifest.dryness == null
                                           ? 'unfinished'

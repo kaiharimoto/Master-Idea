@@ -269,3 +269,17 @@ abstract final class InterviewComposer {
     return BriefPart.values.toSet().difference(served);
   }
 }
+
+/// The same, or null.
+///
+/// For the places that only need to *print* a name: a session written by
+/// another build, or read out of files a person edited, can name something
+/// this catalog does not have — and a lookup that throws while a list is
+/// being built takes the whole screen down, including every other session on
+/// it. A run may still demand the strict one.
+InterviewModule? moduleByIdOrNull(String id) {
+  for (final InterviewModule m in interviewModules) {
+    if (m.id == id) return m;
+  }
+  return null;
+}

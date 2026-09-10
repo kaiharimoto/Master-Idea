@@ -79,6 +79,14 @@ shape of them belongs where the next session will look.
   deleted.
 - **The output can leave.** Dossier, ledger and pitch all copy and save, and
   the dossier runs the invariant suite in the app.
+- **The ledger accounts for the run.** Council time against wall clock, every
+  pause with how its resume time was arrived at, the model calls, the route,
+  and each round's proposed-against-kept — all of it was in the manifest and
+  none of it reached a page.
+- **Settings tests the connection by using it.** Locating the binary proves
+  nothing about an expired login or a model name the CLI does not know, which
+  are the two failures that actually end a sitting. It now puts a turn through
+  and reports what came back, against the values as typed.
 
 ## The seam to Master Prompt
 

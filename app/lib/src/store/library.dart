@@ -41,6 +41,14 @@ class Library extends ChangeNotifier {
   bool get isLoaded => _loaded;
   Settings get settings => _settings;
 
+  /// Why the library could not be read, if it could not.
+  ///
+  /// Logged only, it produced an app that says "nothing here yet" to somebody
+  /// whose sessions are all present on disk and unreadable for one nameable
+  /// reason.
+  String? _problem;
+  String? get problem => _problem;
+
   /// Newest first, which is the order a library is read in.
   List<Session> get sessions => <Session>[
     for (final String id in _order)
@@ -180,6 +188,13 @@ class Library extends ChangeNotifier {
     if (inMemory) return;
     (await _sessionStore()).delete(id);
     Diagnostics.instance.log('Deleted session $id.');
+  }
+
+  /// Called when [load] itself threw, so the screen can say so.
+  void failedToLoad(String why) {
+    _problem = why;
+    _loaded = true;
+    notifyListeners();
   }
 
   void select(String id) {

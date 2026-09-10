@@ -192,3 +192,17 @@ ExplorationAngle angleById(String id) => explorationAngles.firstWhere(
   orElse: () =>
       throw ArgumentError.value(id, 'id', 'no such exploration angle'),
 );
+
+/// The same, or null.
+///
+/// For the places that only need to *print* a name: a session written by
+/// another build, or read out of files a person edited, can name something
+/// this catalog does not have — and a lookup that throws while a list is
+/// being built takes the whole screen down, including every other session on
+/// it. A run may still demand the strict one.
+ExplorationAngle? angleByIdOrNull(String id) {
+  for (final ExplorationAngle a in explorationAngles) {
+    if (a.id == id) return a;
+  }
+  return null;
+}

@@ -36,6 +36,7 @@ class _MasterIdeaAppState extends State<MasterIdeaApp> {
     super.initState();
     _library.load().catchError((Object e) {
       Diagnostics.instance.log('The library could not be read: $e');
+      _library.failedToLoad('$e');
     });
     // Silent on purpose. Someone opening the app to put an idea before the
     // council should not be met by a network error; the menu grows a mark if

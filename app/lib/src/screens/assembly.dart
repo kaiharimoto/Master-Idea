@@ -22,12 +22,16 @@ class AssemblyScreen extends StatefulWidget {
     required this.library,
     required this.sitting,
     required this.session,
+    this.onOpenSitting,
     super.key,
   });
 
   final Library library;
   final Sitting sitting;
   final Session session;
+
+  /// Where an empty assembly leads.
+  final VoidCallback? onOpenSitting;
 
   @override
   State<AssemblyScreen> createState() => _AssemblyScreenState();
@@ -114,11 +118,18 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
         final bool computing = widget.sitting.isBusy;
 
         if (s.directions.isEmpty) {
-          return const MiEmpty(
+          return MiEmpty(
             title: 'There is nothing to preside over yet',
             detail:
                 'The council proposes and rates; you decide what ships. Open '
                 'the sitting and this fills as directions arrive.',
+            action: widget.onOpenSitting == null
+                ? null
+                : MiButton(
+                    label: 'Go to the sitting',
+                    kind: MiButtonKind.primary,
+                    onPressed: widget.onOpenSitting,
+                  ),
           );
         }
 

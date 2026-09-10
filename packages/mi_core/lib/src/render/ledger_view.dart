@@ -1,4 +1,5 @@
 import '../session/ledger.dart';
+import '../session/manifest.dart';
 import '../session/round.dart';
 import '../session/session.dart';
 import 'document.dart';
@@ -141,6 +142,117 @@ abstract final class LedgerRenderer {
       }
     }
 
+    _howItWasConducted(s, b);
+
     return MiDocument(b);
+  }
+
+  /// The run's own account of itself.
+  ///
+  /// The manifest records council time, every pause, every model call and
+  /// which transport drove it, and none of it reached a page — so the one
+  /// number that separates a real six-hour sitting from a six-hour wait was
+  /// visible only to somebody willing to read `run_manifest.json` by hand.
+  /// It belongs in the ledger rather than the dossier: the dossier is the
+  /// judgement, and this is the evidence that the judgement was worked for.
+  static void _howItWasConducted(Session s, List<DocBlock> b) {
+    final RunManifest m = s.manifest;
+    b
+      ..add(const DocBlock(BlockKind.rule, ''))
+      ..add(const DocBlock(BlockKind.heading, 'How this run was conducted'))
+      ..add(
+        DocBlock(
+          BlockKind.field,
+          m.transport == 'handover'
+              ? 'carried by hand, one turn at a time'
+              : 'driven through the Claude CLI, unattended',
+          label: 'Route',
+        ),
+      )
+      ..add(
+        DocBlock(
+          BlockKind.field,
+          '${_spell(m.councilTime)} of council time'
+          '${m.pauses.isEmpty ? '' : ', inside ${_spell(m.wallClock)} of wall clock'}',
+          label: 'Time',
+        ),
+      )
+      ..add(
+        DocBlock(
+          BlockKind.field,
+          m.tokensIn == 0 && m.tokensOut == 0
+              ? '${m.calls.length} model calls, usage not reported by this '
+                    'transport'
+              : '${m.calls.length} model calls, ${m.tokensIn} tokens in and '
+                    '${m.tokensOut} out',
+          label: 'Calls',
+        ),
+      );
+
+    for (final LimitPause p in m.pauses) {
+      b.add(
+        DocBlock(
+          BlockKind.item,
+          'Paused ${_spell(p.length)} on a ${p.kind} limit, resuming at a time '
+          'that was ${p.source}. Excluded from council time.',
+        ),
+      );
+    }
+
+    // What each round actually yielded, which is the difference between a
+    // round that searched and a round that repeated itself.
+    for (final RoundRecord r in s.rounds) {
+      final int proposed = r.returns.fold(
+        0,
+        (int n, AngleReturn a) => n + a.proposedIds.length,
+      );
+      final int exhausted = r.returns
+          .where((AngleReturn a) => a.exhausted)
+          .length;
+      b.add(
+        DocBlock(
+          BlockKind.item,
+          'Round ${r.number}: ${r.breadth} angles, $proposed proposed, '
+          '${r.newDirectionIds.length} kept, ${r.rejections.length} already '
+          'held'
+          '${exhausted == 0 ? '' : ', $exhausted angle(s) exhausted'}.',
+        ),
+      );
+    }
+
+    final List<String> thin = s.clustersNotSpanning;
+    if (thin.isNotEmpty) {
+      b
+        ..add(
+          const DocBlock(
+            BlockKind.subheading,
+            'Clusters that do not span the range',
+          ),
+        )
+        ..add(
+          const DocBlock(
+            BlockKind.paragraph,
+            'A count of directions says nothing about whether the client was '
+            'offered a real choice. These clusters hold no conservative, no '
+            'ambitious or no reckless member, so within them there is a '
+            'decision the council did not put.',
+          ),
+        );
+      for (final String id in thin) {
+        b.add(DocBlock(BlockKind.item, id));
+      }
+    }
+  }
+
+  /// Durations as words. A number of seconds is a measurement; this is a
+  /// document.
+  static String _spell(Duration d) {
+    if (d.inMinutes < 1) return 'under a minute';
+    if (d.inHours < 1) return '${d.inMinutes} minutes';
+    final int hours = d.inHours;
+    final int minutes = d.inMinutes % 60;
+    return minutes == 0
+        ? '$hours hour${hours == 1 ? '' : 's'}'
+        : '$hours hour${hours == 1 ? '' : 's'} $minutes minutes';
   }
 }

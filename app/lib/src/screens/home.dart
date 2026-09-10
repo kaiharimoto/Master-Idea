@@ -7,6 +7,7 @@ import 'package:mi_design/mi_design.dart';
 import '../app.dart';
 import '../widgets/counts.dart';
 import '../store/library.dart';
+import '../store/naming.dart';
 import '../store/sitting.dart';
 import '../update/updater.dart';
 import 'arrival.dart';
@@ -225,14 +226,25 @@ class _HomeScreenState extends State<HomeScreen> {
       onFinished: () => _go(Region.dossier),
       onOpenSettings: () => _go(Region.settings),
     ),
-    Region.ledger => LedgerScreen(session: open),
-    Region.dossier => DossierScreen(session: open),
+    Region.ledger => LedgerScreen(
+      session: open,
+      onOpenSitting: () => _go(Region.run),
+    ),
+    Region.dossier => DossierScreen(
+      session: open,
+      onOpenSitting: () => _go(Region.run),
+    ),
     Region.assembly => AssemblyScreen(
       library: widget.library,
       sitting: _sitting,
       session: open,
+      onOpenSitting: () => _go(Region.run),
     ),
-    Region.pitch => PitchScreen(library: widget.library, session: open),
+    Region.pitch => PitchScreen(
+      library: widget.library,
+      session: open,
+      onOpenAssembly: () => _go(Region.assembly),
+    ),
     Region.library => LibraryScreen(
       library: widget.library,
       sitting: _sitting,
@@ -268,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 runSpacing: MiSpace.xs,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: <Widget>[
-                  MiTag(open.interview.verdict.template.name),
+                  MiTag(tierName(open.interview.verdict)),
                   Text(
                     countOf(open.directions.length, 'direction'),
                     style: MiType.caption.copyWith(color: c.inkMuted),
