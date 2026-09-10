@@ -36,10 +36,13 @@ void main() {
     await wide(tester, library);
 
     for (final Region r in Region.values) {
-      expect(find.text(r.title), findsWidgets,
-          reason:
-              '${r.title} has no way in on a wide window, which is how a '
-              'desktop install ends up with a region nobody can reach.');
+      expect(
+        find.text(r.title),
+        findsWidgets,
+        reason:
+            '${r.title} has no way in on a wide window, which is how a '
+            'desktop install ends up with a region nobody can reach.',
+      );
     }
   });
 
@@ -54,10 +57,13 @@ void main() {
     await tester.tap(find.text(Region.settings.title));
     await tester.pumpAndSettle();
 
-    expect(find.text(s.title), findsWidgets,
-        reason:
-            'A pushed route covers the rail too, which turns a 1600px window '
-            'into a phone page and takes the session with it.');
+    expect(
+      find.text(s.title),
+      findsWidgets,
+      reason:
+          'A pushed route covers the rail too, which turns a 1600px window '
+          'into a phone page and takes the session with it.',
+    );
     // Section marks are set in the family's small caps, in both halves.
     expect(find.text('APPEARANCE'), findsOneWidget);
   });
@@ -77,10 +83,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byIcon(Icons.menu), findsOneWidget,
-        reason:
-            'With one column the regions live behind a menu; the rail would '
-            'leave no room for the region itself.');
+    expect(
+      find.byIcon(Icons.menu),
+      findsOneWidget,
+      reason:
+          'With one column the regions live behind a menu; the rail would '
+          'leave no room for the region itself.',
+    );
   });
 
   test('the gate is a layout question, not a platform one', () {

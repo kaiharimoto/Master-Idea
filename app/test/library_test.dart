@@ -90,9 +90,12 @@ void main() {
     await library.load();
     await library.begin(interview());
     library.close();
-    expect(library.open, isNull,
-        reason:
-            'There is no blank canvas to return to: with nothing open the app '
-            'is a question again.');
+    expect(
+      library.open,
+      isNull,
+      reason:
+          'There is no blank canvas to return to: with nothing open the app '
+          'is a question again.',
+    );
   });
 }

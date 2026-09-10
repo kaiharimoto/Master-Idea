@@ -85,19 +85,17 @@ class _UpdateSheet extends StatelessWidget {
                 MiMeter(value: updater.progress),
                 const SizedBox(height: MiSpace.sm),
               ],
-              Text(
-                switch (updater.phase) {
-                  UpdatePhase.checking => 'Reading the release page…',
-                  UpdatePhase.downloading => updater.progress < 0
+              Text(switch (updater.phase) {
+                UpdatePhase.checking => 'Reading the release page…',
+                UpdatePhase.downloading =>
+                  updater.progress < 0
                       ? 'Downloading…'
                       : 'Downloading — '
                             '${(updater.progress * 100).round()} per cent',
-                  UpdatePhase.downloaded => 'Downloaded and ready to install.',
-                  UpdatePhase.installing => 'Handed to the installer.',
-                  _ => check?.detail ?? 'Nothing checked yet.',
-                },
-                style: MiType.prose.copyWith(color: c.ink),
-              ),
+                UpdatePhase.downloaded => 'Downloaded and ready to install.',
+                UpdatePhase.installing => 'Handed to the installer.',
+                _ => check?.detail ?? 'Nothing checked yet.',
+              }, style: MiType.prose.copyWith(color: c.ink)),
               if (updater.error != null) ...<Widget>[
                 const SizedBox(height: MiSpace.md),
                 MiPanel(
@@ -128,7 +126,8 @@ class _UpdateSheet extends StatelessWidget {
                       label: 'Download',
                       busy: updater.phase == UpdatePhase.downloading,
                       onPressed: updater.busy ? null : updater.download,
-            kind: MiButtonKind.primary,),
+                      kind: MiButtonKind.primary,
+                    ),
                   if (updater.file != null)
                     MiButton(
                       label: 'Install',
@@ -136,12 +135,14 @@ class _UpdateSheet extends StatelessWidget {
                       onPressed: updater.busy || updater.quitting
                           ? null
                           : updater.install,
-            kind: MiButtonKind.primary,),
+                      kind: MiButtonKind.primary,
+                    ),
                   MiButton(
                     label: 'Check again',
                     busy: updater.phase == UpdatePhase.checking,
                     onPressed: updater.busy ? null : updater.runCheck,
-            kind: MiButtonKind.secondary,),
+                    kind: MiButtonKind.secondary,
+                  ),
                 ],
               ),
               const SizedBox(height: MiSpace.md),

@@ -21,13 +21,19 @@ void main() {
     await tester.pumpWidget(app(fresh()));
     await tester.pump();
 
-    expect(find.text('What is the idea?'), findsOneWidget,
-        reason:
-            'Arriving at an empty document waiting to be filled puts the work '
-            'back on someone who came here because they do not know what to '
-            'do with their idea.');
-    expect(find.byType(TextField), findsOneWidget,
-        reason: 'One question, one field. Not a workspace.');
+    expect(
+      find.text('What is the idea?'),
+      findsOneWidget,
+      reason:
+          'Arriving at an empty document waiting to be filled puts the work '
+          'back on someone who came here because they do not know what to '
+          'do with their idea.',
+    );
+    expect(
+      find.byType(TextField),
+      findsOneWidget,
+      reason: 'One question, one field. Not a workspace.',
+    );
   });
 
   testWidgets('an idea opens the proceeding at the next question', (
@@ -46,10 +52,13 @@ void main() {
     // The step mark is set in the archive's small caps, which is what the
     // eyebrow style does to every label in this app.
     expect(find.textContaining('QUESTION 2 OF'), findsOneWidget);
-    expect(find.textContaining('What form does this take'), findsOneWidget,
-        reason:
-            'The medium is asked second because it selects the domain '
-            'profile, which changes what counts as a good direction.');
+    expect(
+      find.textContaining('What form does this take'),
+      findsOneWidget,
+      reason:
+          'The medium is asked second because it selects the domain '
+          'profile, which changes what counts as a good direction.',
+    );
   });
 
   testWidgets('choosing a medium composes the rest of the interview', (
@@ -71,21 +80,29 @@ void main() {
     await tester.pumpAndSettle();
 
     final int composed = InterviewComposer.compose(profileId: 'song').length;
-    expect(find.textContaining('OF $composed'), findsOneWidget,
-        reason:
-            'The interview is composed from the bank for this medium rather '
-            'than improvised, so its length is knowable the moment the medium '
-            'is chosen.');
+    expect(
+      find.textContaining('OF $composed'),
+      findsOneWidget,
+      reason:
+          'The interview is composed from the bank for this medium rather '
+          'than improvised, so its length is knowable the moment the medium '
+          'is chosen.',
+    );
   });
 
-  testWidgets('nothing on arrival reads as a chat', (WidgetTester tester) async {
+  testWidgets('nothing on arrival reads as a chat', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(app(fresh()));
     await tester.pump();
 
-    expect(find.byType(ListView), findsNothing,
-        reason:
-            'A scrolling list of turns is the shape of a chat app, and this '
-            'is a proceeding: one thing on screen, with a state and an '
-            'outcome.');
+    expect(
+      find.byType(ListView),
+      findsNothing,
+      reason:
+          'A scrolling list of turns is the shape of a chat app, and this '
+          'is a proceeding: one thing on screen, with a state and an '
+          'outcome.',
+    );
   });
 }

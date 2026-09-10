@@ -27,8 +27,9 @@ Future<void> loadFonts() async {
     'Inter-Bold',
   ]) {
     final File f = File('../packages/mi_design/assets/fonts/$face.ttf');
-    final FontLoader loader = FontLoader('packages/mi_design/Inter')
-      ..addFont(Future<ByteData>.value(f.readAsBytesSync().buffer.asByteData()));
+    final FontLoader loader = FontLoader(
+      'packages/mi_design/Inter',
+    )..addFont(Future<ByteData>.value(f.readAsBytesSync().buffer.asByteData()));
     await loader.load();
   }
 }
@@ -166,7 +167,8 @@ Session _withDirections(Session s) {
           Dissent(
             by: 'dissenter#1.1',
             verdict: 'gestured',
-            because: 'The index is the hard half and it is described in a line.',
+            because:
+                'The index is the hard half and it is described in a line.',
           ),
         ],
       ),

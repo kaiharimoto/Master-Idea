@@ -200,7 +200,7 @@ class MiButton extends StatelessWidget {
                 ],
                 Flexible(
                   child: Text(
-                    busy ? '\$label…' : label,
+                    busy ? '$label…' : label,
                     style: MiType.heading.copyWith(color: fg),
                     textAlign: TextAlign.center,
                   ),
@@ -441,7 +441,7 @@ class MiInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final MiColors c = MiTheme.colorsOf(context);
-    final bool pointer = MediaQuery.sizeOf(context).width >= 900;
+    final bool pointer = MediaQuery.sizeOf(context).width >= MiSpace.wideGate;
 
     final Widget mark = Icon(Icons.info_outline, size: 18, color: c.inkFaint);
 
@@ -735,6 +735,7 @@ class MiWriting extends StatelessWidget {
     this.maxLines = 12,
     this.autofocus = false,
     this.onSubmit,
+    this.onChanged,
     super.key,
   });
 
@@ -744,6 +745,11 @@ class MiWriting extends StatelessWidget {
   final int maxLines;
   final bool autofocus;
   final VoidCallback? onSubmit;
+
+  /// Every keystroke, for the few fields that answer as they are typed — a
+  /// filter over a list, a button that has to enable itself. A screen that
+  /// listens to the controller instead has to remember to stop.
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -755,6 +761,7 @@ class MiWriting extends StatelessWidget {
         autofocus: autofocus,
         minLines: minLines,
         maxLines: maxLines,
+        onChanged: onChanged,
         style: MiType.prose.copyWith(color: c.ink),
         decoration: InputDecoration(hintText: hint),
       ),

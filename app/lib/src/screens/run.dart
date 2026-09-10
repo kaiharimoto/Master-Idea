@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
 import '../store/sitting.dart';
-import '../transport/council_session.dart';
-import '../transport/handover_council.dart';
+import '../widgets/carry_panel.dart';
 
 /// The council, sitting.
 ///
@@ -19,12 +17,13 @@ import '../transport/handover_council.dart';
 /// Nothing on this screen asks the client to stay. That is what a client
 /// relationship with a council requires: their work is at the beginning and
 /// the end, never in the middle.
-class RunScreen extends StatefulWidget {
+class RunScreen extends StatelessWidget {
   const RunScreen({
     required this.library,
     required this.sitting,
     required this.session,
     required this.onFinished,
+    required this.onOpenSettings,
     super.key,
   });
 
@@ -33,27 +32,35 @@ class RunScreen extends StatefulWidget {
   final Session session;
   final VoidCallback onFinished;
 
-  @override
-  State<RunScreen> createState() => _RunScreenState();
-}
+  /// Where to send a client whose machine has no council on it. A failure that
+  /// names the fix and cannot reach it is a failure twice.
+  final VoidCallback onOpenSettings;
 
-class _RunScreenState extends State<RunScreen> {
-  final TextEditingController _reply = TextEditingController();
-
-  @override
-  void dispose() {
-    _reply.dispose();
-    super.dispose();
-  }
-
-  Future<void> _begin() async {
+  Future<void> _begin(BuildContext context) async {
+    final Session open = library.open ?? session;
+    // A sitting that already went dry ended for the only reason this system
+    // permits. Re-opening it is a decision, not a button: it runs at least two
+    // more rounds of paid model calls and rewrites the dryness decision that
+    // is the session's whole claim to have finished.
+    if (open.manifest.dryness != null) {
+      final bool again = await showMiConfirm(
+        context,
+        title: 'This sitting already ran dry',
+        body:
+            'It ended because two consecutive rounds returned nothing new. '
+            'Opening it again runs at least two more rounds and replaces that '
+            'decision with a new one.',
+        action: 'Convene it again',
+      );
+      if (!again) return;
+    }
     // Nothing on this screen probes or writes status on arrival. A region that
     // sets a runner to idle when it opens is a region that can make a live
     // sitting look finished, and the next Run click launches a second council
     // into the same session.
-    await widget.sitting.begin(widget.session, widget.library.settings);
-    if (mounted && widget.sitting.phase == SittingPhase.finished) {
-      widget.onFinished();
+    await sitting.begin(open, library.settings);
+    if (context.mounted && sitting.phase == SittingPhase.finished) {
+      onFinished();
     }
   }
 
@@ -61,12 +68,17 @@ class _RunScreenState extends State<RunScreen> {
   Widget build(BuildContext context) {
     final MiColors c = MiTheme.colorsOf(context);
     return ListenableBuilder(
-      listenable: widget.sitting,
+      listenable: Listenable.merge(<Listenable>[sitting, library]),
       builder: (BuildContext context, _) {
-        final Sitting s = widget.sitting;
-        final Session session =
-            widget.library.open ?? widget.session;
-        final CouncilTurn? carrying = s.hand?.waiting;
+        final Session open = library.open ?? session;
+        final CouncilTurn? carrying = sitting.hand?.waiting;
+        // The sitting is one per app, and the client may open another session
+        // while it runs. Saying whose it is beats showing counts that do not
+        // move against a session the council is not looking at.
+        final bool elsewhere =
+            sitting.isBusy &&
+            sitting.sessionId != null &&
+            sitting.sessionId != open.id;
 
         return SingleChildScrollView(
           child: MiLeaf(
@@ -74,18 +86,30 @@ class _RunScreenState extends State<RunScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 MiSectionHeader(
-                  title: session.interview.verdict.template.name,
-                  subtitle: session.interview.verdict.template.expectation,
+                  title: open.interview.verdict.template.name,
+                  subtitle: open.interview.verdict.template.expectation,
                   trailing: MiTag(
-                    _status(s),
-                    tone: switch (s.phase) {
+                    _status(sitting, elsewhere: elsewhere),
+                    tone: switch (sitting.phase) {
                       SittingPhase.failed => c.danger,
                       SittingPhase.finished => c.success,
+                      SittingPhase.paused => c.warning,
                       _ => c.inkMuted,
                     },
                   ),
                 ),
                 const SizedBox(height: MiSpace.lg),
+
+                if (elsewhere) ...<Widget>[
+                  MiPanel(
+                    child: Text(
+                      'The council is sitting on another session on this '
+                      'device. It carries on wherever you are; this one waits.',
+                      style: MiType.prose.copyWith(color: c.inkMuted),
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.md),
+                ],
 
                 // What has actually accumulated. Counts of things that exist,
                 // never a fraction of a total nobody can know: the sitting
@@ -96,64 +120,96 @@ class _RunScreenState extends State<RunScreen> {
                     spacing: MiSpace.xxl,
                     runSpacing: MiSpace.md,
                     children: <Widget>[
-                      MiField(
-                        label: 'Rounds closed',
-                        child: Text(
-                          '${session.rounds.length}',
-                          style: MiType.numeric.copyWith(color: c.ink),
-                        ),
-                      ),
-                      MiField(
-                        label: 'Directions held',
-                        child: Text(
-                          '${session.directions.length}',
-                          style: MiType.numeric.copyWith(color: c.ink),
-                        ),
-                      ),
-                      MiField(
-                        label: 'Verdicts recorded',
-                        child: Text(
-                          '${session.ratings.length}',
-                          style: MiType.numeric.copyWith(color: c.ink),
-                        ),
-                      ),
-                      MiField(
-                        label: 'Territory mapped',
-                        child: Text(
-                          '${session.ledger.territories.length}',
-                          style: MiType.numeric.copyWith(color: c.ink),
-                        ),
+                      _count(c, 'Rounds closed', open.rounds.length),
+                      _count(c, 'Directions held', open.directions.length),
+                      _count(c, 'Verdicts recorded', open.ratings.length),
+                      _count(
+                        c,
+                        'Territory mapped',
+                        open.ledger.territories.length,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: MiSpace.lg),
 
-                if (carrying != null) ..._carry(c, s, carrying),
-
-                if (s.problem != null) ...<Widget>[
+                if (sitting.pausedUntil != null) ...<Widget>[
                   MiPanel(
-                    accent: c.danger,
-                    child: Text(
-                      s.problem!,
-                      style: MiType.prose.copyWith(color: c.ink),
+                    accent: c.warning,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Waiting out the provider’s limit until '
+                          '${_clock(sitting.pausedUntil!)}.',
+                          style: MiType.body.copyWith(color: c.ink),
+                        ),
+                        const SizedBox(height: MiSpace.xs),
+                        Text(
+                          'The sitting resumes on its own. A limit is not the '
+                          'council falling silent, so this wait is excluded '
+                          'from council time and cannot end the run.',
+                          style: MiType.caption.copyWith(color: c.inkMuted),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: MiSpace.md),
                 ],
 
-                if (!s.isBusy) ...<Widget>[
+                if (carrying != null) ...<Widget>[
+                  CarryPanel(hand: sitting.hand!, turn: carrying),
+                  const SizedBox(height: MiSpace.lg),
+                ],
+
+                if (sitting.problem != null) ...<Widget>[
+                  MiPanel(
+                    accent: c.danger,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          sitting.problem!,
+                          style: MiType.prose.copyWith(color: c.ink),
+                        ),
+                        const SizedBox(height: MiSpace.sm),
+                        Text(
+                          'Every round that closed is stored. Fix this and '
+                          'open the sitting again — it resumes from the '
+                          'barrier it reached.',
+                          style: MiType.caption.copyWith(color: c.inkMuted),
+                        ),
+                        if (sitting.route == SittingRoute.cli) ...<Widget>[
+                          const SizedBox(height: MiSpace.sm),
+                          MiButton(
+                            label: 'Settings',
+                            onPressed: onOpenSettings,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.md),
+                ],
+
+                if (!sitting.isBusy) ...<Widget>[
                   MiButton(
-                    label: session.rounds.isEmpty
-                        ? 'Open the sitting'
-                        : 'Resume from round ${session.rounds.length + 1}',
+                    label: switch ((
+                      open.rounds.isEmpty,
+                      open.manifest.dryness,
+                    )) {
+                      (true, _) => 'Open the sitting',
+                      (false, null) =>
+                        'Resume from round ${open.rounds.length + 1}',
+                      (false, _) => 'Convene it again',
+                    },
                     kind: MiButtonKind.primary,
                     expand: true,
-                    onPressed: _begin,
+                    onPressed: elsewhere ? null : () => _begin(context),
                   ),
                   const SizedBox(height: MiSpace.sm),
                   Text(
-                    canDriveCouncil
+                    sitting.canDrive
                         ? 'The council deliberates on its own. You may watch, '
                               'and you may leave — it never waits on you, and '
                               'it ends only when two consecutive rounds return '
@@ -164,27 +220,51 @@ class _RunScreenState extends State<RunScreen> {
                               'is why the smallest tier is the honest one.',
                     style: MiType.caption.copyWith(color: c.inkMuted),
                   ),
-                ] else if (s.route == SittingRoute.handover)
+                ] else
                   MiButton(
                     label: 'Stop the sitting',
                     expand: true,
-                    onPressed: s.stop,
+                    onPressed: () async {
+                      final bool stop = await showMiConfirm(
+                        context,
+                        title: 'Stop the sitting?',
+                        body:
+                            'Every round that has closed is kept, and the '
+                            'sitting resumes from there whenever you open it '
+                            'again. The round in progress is lost.',
+                        action: 'Stop it',
+                      );
+                      if (stop) sitting.stop();
+                    },
                   ),
 
                 const SizedBox(height: MiSpace.lg),
                 const MiRule(),
+                // One line of it out here, because a screen whose only sign of
+                // life is behind a closed disclosure is indistinguishable from
+                // a screen that has hung.
+                if (sitting.lastEvent != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: MiSpace.sm),
+                    child: Text(
+                      '${sitting.lastEvent}',
+                      style: MiType.mono.copyWith(color: c.inkMuted),
+                    ),
+                  ),
                 MiDisclosure(
                   label: 'What the council has been doing',
-                  trailingNote: s.events.isEmpty ? null : '${s.events.length}',
+                  trailingNote: sitting.events.isEmpty
+                      ? null
+                      : '${sitting.events.length}',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      if (s.events.isEmpty)
+                      if (sitting.events.isEmpty)
                         Text(
                           'Nothing yet.',
                           style: MiType.caption.copyWith(color: c.inkMuted),
                         ),
-                      for (final RunEvent e in s.events.reversed.take(40))
+                      for (final RunEvent e in sitting.events.reversed.take(40))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 2),
                           child: Text(
@@ -204,73 +284,24 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
-  String _status(Sitting s) => switch (s.phase) {
-    SittingPhase.idle => 'The council is not sitting',
-    SittingPhase.deliberating => 'The council is deliberating',
-    SittingPhase.waitingForHand => 'Waiting to be carried',
-    SittingPhase.finished => 'The sitting has run dry',
-    SittingPhase.failed => 'The sitting could not proceed',
-  };
+  Widget _count(MiColors c, String label, int n) => MiField(
+    label: label,
+    child: Text('$n', style: MiType.numeric.copyWith(color: c.ink)),
+  );
 
-  /// The handover route: one turn out, one reply back.
-  List<Widget> _carry(MiColors c, Sitting s, CouncilTurn turn) {
-    final HandoverCouncil? hand = s.hand;
-    return <Widget>[
-      MiPanel(
-        accent: c.ink,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                MiTag(turn.purpose),
-                const SizedBox(width: MiSpace.sm),
-                Expanded(
-                  child: Text(
-                    turn.agent.id,
-                    style: MiType.mono.copyWith(color: c.inkMuted),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: MiSpace.md),
-            MiButton(
-              label: 'Copy this turn',
-              kind: MiButtonKind.primary,
-              expand: true,
-              onPressed: () =>
-                  Clipboard.setData(ClipboardData(text: turn.prompt)),
-            ),
-            const SizedBox(height: MiSpace.sm),
-            Text(
-              'Paste it into your chat app, then bring the whole reply back '
-              'here. A reply that arrived by hand has no more authority than '
-              'one that came down a pipe: it is read by the same parser and '
-              'held to the same invariants.',
-              style: MiType.caption.copyWith(color: c.inkMuted),
-            ),
-            const SizedBox(height: MiSpace.md),
-            MiWriting(
-              controller: _reply,
-              hint: 'Everything the reply said.',
-              onSubmit: () => _bringBack(hand),
-            ),
-            const SizedBox(height: MiSpace.sm),
-            MiButton(
-              label: 'Bring it back',
-              expand: true,
-              onPressed: () => _bringBack(hand),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: MiSpace.lg),
-    ];
-  }
+  static String _clock(DateTime at) =>
+      '${at.hour.toString().padLeft(2, '0')}:'
+      '${at.minute.toString().padLeft(2, '0')}';
 
-  void _bringBack(HandoverCouncil? hand) {
-    if (_reply.text.trim().isEmpty) return;
-    hand?.receive(_reply.text);
-    _reply.clear();
+  String _status(Sitting s, {required bool elsewhere}) {
+    if (elsewhere) return 'Sitting elsewhere';
+    return switch (s.phase) {
+      SittingPhase.idle => 'The council is not sitting',
+      SittingPhase.deliberating => 'The council is deliberating',
+      SittingPhase.waitingForHand => 'Waiting to be carried',
+      SittingPhase.paused => 'Waiting out a provider limit',
+      SittingPhase.finished => 'The sitting has run dry',
+      SittingPhase.failed => 'The sitting could not proceed',
+    };
   }
 }

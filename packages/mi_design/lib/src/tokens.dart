@@ -236,6 +236,24 @@ abstract final class MiType {
   static TextStyle get verdict =>
       _base.copyWith(fontSize: 17, height: 1.35, fontWeight: FontWeight.w600);
 
-  static TextStyle get mono =>
-      const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5);
+  /// For things that are identifiers rather than words: a session id, a brief
+  /// hash, a seat's name, a line of the run's own log.
+  ///
+  /// Named with a fallback list rather than the bare family `monospace`, which
+  /// resolves on Android and on Windows resolves to nothing at all — falling
+  /// through to the platform sans **silently**, which is the same failure the
+  /// unqualified font name causes and just as invisible.
+  static TextStyle get mono => const TextStyle(
+    fontFamily: 'monospace',
+    fontFamilyFallback: <String>[
+      'Roboto Mono',
+      'Consolas',
+      'Cascadia Mono',
+      'DejaVu Sans Mono',
+      'Courier New',
+      'monospace',
+    ],
+    fontSize: 13,
+    height: 1.5,
+  );
 }

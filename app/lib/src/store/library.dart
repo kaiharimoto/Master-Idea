@@ -84,8 +84,10 @@ class Library extends ChangeNotifier {
         Diagnostics.instance.log('Skipped an unreadable session $id: $e');
       }
     }
-    _order.sort((String a, String b) =>
-        _sessions[b]!.createdAt.compareTo(_sessions[a]!.createdAt));
+    _order.sort(
+      (String a, String b) =>
+          _sessions[b]!.createdAt.compareTo(_sessions[a]!.createdAt),
+    );
 
     final File s = File('${_root!.path}${Platform.pathSeparator}settings.json');
     if (s.existsSync()) {
@@ -152,6 +154,22 @@ class Library extends ChangeNotifier {
     (await _sessionStore()).write(s);
   }
 
+  /// Remove a session and everything in it.
+  ///
+  /// Nothing is hosted anywhere, so this is the only copy — which is why the
+  /// screen asks first and says so in those words. The store refuses an id
+  /// that is not a session of its own, so a bad one cannot take a directory
+  /// with it.
+  Future<void> delete(String id) async {
+    if (_openId == id) _openId = null;
+    _sessions.remove(id);
+    _order.remove(id);
+    notifyListeners();
+    if (inMemory) return;
+    (await _sessionStore()).delete(id);
+    Diagnostics.instance.log('Deleted session $id.');
+  }
+
   void select(String id) {
     _openId = _sessions.containsKey(id) ? id : null;
     notifyListeners();
@@ -168,6 +186,10 @@ class Library extends ChangeNotifier {
   /// Where a session's files are, for the client who wants to look.
   String pathOf(String id) =>
       _root == null ? '' : '${_root!.path}${Platform.pathSeparator}$id';
+
+  /// Where the library itself is. Not the newest session's own directory,
+  /// which is what "Kept in" used to show.
+  String get root => _root?.path ?? '';
 
   Future<void> updateSettings(Settings s) async {
     _settings = s;

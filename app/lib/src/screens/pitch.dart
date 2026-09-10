@@ -49,7 +49,8 @@ class PitchScreen extends StatelessWidget {
                   label: 'Copy the whole thing',
                   onPressed: () =>
                       Clipboard.setData(ClipboardData(text: pitch)),
-            kind: MiButtonKind.primary,),
+                  kind: MiButtonKind.primary,
+                ),
                 const SizedBox(width: MiSpace.md),
                 Expanded(
                   child: Text(

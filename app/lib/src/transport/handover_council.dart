@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:mi_core/mi_core.dart';
@@ -16,75 +17,86 @@ import 'package:mi_core/mi_core.dart';
 /// is why the phone runs the smallest tier and the app says so plainly rather
 /// than borrowing the desktop's autonomy.
 ///
+/// **Turns queue; they are never refused.** A round fans out four angles at
+/// the smallest tier and pipelines every direction through challenge and
+/// rating, so the second turn arrives while the first is still on screen.
+/// Answering it with an error was not a limitation of the phone but the end of
+/// the sitting: the error is not a pause, so it left the run, and the client
+/// lost the turn they had just carried by hand. One queue, served in order,
+/// keeps the same `CouncilRun` and the same breadth — the transport decides
+/// how a turn travels, never how wide the council looks.
+///
 /// A reply is never discarded: whatever arrives is handed to the same parser
 /// the CLI transport uses, and a paste that yields nothing is reported as
 /// nothing found rather than silently treated as an exhausted angle — the
 /// distinction between those two is what dryness means.
 class HandoverCouncil extends ChangeNotifier implements CouncilTransport {
-  Completer<CouncilReply>? _pending;
-  CouncilTurn? _turn;
+  final Queue<_Carried> _pending = Queue<_Carried>();
+  bool _stopped = false;
 
   /// The turn waiting to be carried, if one is.
-  CouncilTurn? get waiting => _turn;
+  CouncilTurn? get waiting => _pending.isEmpty ? null : _pending.first.turn;
 
-  bool get isWaiting => _turn != null;
+  bool get isWaiting => _pending.isNotEmpty;
 
-  /// How many turns have been carried by hand this sitting. Shown so the
-  /// client can see what they are committing to before they start.
+  /// How many turns are queued behind the one on screen.
+  ///
+  /// Shown rather than hidden: a client carrying turns by hand is entitled to
+  /// know how many are behind this one before they start.
+  int get queued => _pending.isEmpty ? 0 : _pending.length - 1;
+
+  /// How many turns have been carried by hand this sitting.
   int carried = 0;
 
   @override
   Future<CouncilReply> ask(CouncilTurn turn) {
-    // One at a time. A second turn arriving while one is on screen would
-    // strand the first, and the run would wait forever on a reply nobody was
-    // ever shown.
-    if (_pending != null) {
-      return Future<CouncilReply>.error(
-        StateError('A turn is already waiting to be carried.'),
-      );
+    if (_stopped) {
+      return Future<CouncilReply>.error(CouncilStopped(DateTime.now().toUtc()));
     }
-    final Completer<CouncilReply> completer = Completer<CouncilReply>();
-    _pending = completer;
-    _turn = turn;
+    final _Carried held = _Carried(turn, Completer<CouncilReply>());
+    _pending.add(held);
     notifyListeners();
-    return completer.future;
+    return held.completer.future;
   }
 
-  /// The client brought a reply back.
+  /// The client brought a reply back for the turn on screen.
   void receive(String text) {
-    final Completer<CouncilReply>? c = _pending;
-    if (c == null) return;
-    _pending = null;
-    _turn = null;
+    if (_pending.isEmpty) return;
+    final _Carried done = _pending.removeFirst();
     carried++;
     notifyListeners();
     // Token counts are unknowable on this route — the chat app does not
     // report them — and are recorded as zero rather than guessed, so a
     // manifest never claims usage that was never measured.
-    c.complete(CouncilReply(text: text));
+    done.completer.complete(CouncilReply(text: text));
   }
 
-  /// The client stopped. The run sees a pause rather than an empty reply,
-  /// because an empty reply is evidence of dryness and this is the opposite of
-  /// evidence.
-  void abandon() {
-    final Completer<CouncilReply>? c = _pending;
-    _pending = null;
-    _turn = null;
+  /// The client stopped.
+  ///
+  /// Every queued turn fails with [CouncilStopped] and every later one is
+  /// refused, so the run ends where it stands rather than putting the next
+  /// turn back on screen. Not an empty reply and not a pause: an empty reply
+  /// is evidence of dryness, a pause is waited out and retried, and this is
+  /// neither.
+  void stop() {
+    _stopped = true;
+    final DateTime at = DateTime.now().toUtc();
+    while (_pending.isNotEmpty) {
+      _pending.removeFirst().completer.completeError(CouncilStopped(at));
+    }
     notifyListeners();
-    c?.completeError(
-      CouncilPaused(
-        'handover',
-        'The sitting was stopped by hand.',
-        DateTime.now().toUtc(),
-      ),
-    );
   }
 
   @override
   void dispose() {
     // Never leave the run holding a future nobody will complete.
-    abandon();
+    if (!_stopped) stop();
     super.dispose();
   }
+}
+
+class _Carried {
+  _Carried(this.turn, this.completer);
+  final CouncilTurn turn;
+  final Completer<CouncilReply> completer;
 }

@@ -153,10 +153,7 @@ class InterviewDraft extends ChangeNotifier {
               at: now,
             ),
       ],
-      brief: ConfirmedBrief(
-        restatement: restatement.trim(),
-        approvedAt: now,
-      ),
+      brief: ConfirmedBrief(restatement: restatement.trim(), approvedAt: now),
       unknowns: List<DeclaredUnknown>.unmodifiable(unknowns),
       verdict: verdict,
       closedAt: now,
@@ -414,7 +411,8 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
           _licence.clear();
           setState(() {});
         },
-            kind: MiButtonKind.secondary,),
+        kind: MiButtonKind.secondary,
+      ),
       const SizedBox(height: MiSpace.xl),
       MiRule(),
       const SizedBox(height: MiSpace.lg),
@@ -438,9 +436,10 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
                             'the council judged from their appetite.';
                 setState(() {});
               },
-            kind: t.id != verdict.templateId
-                ? MiButtonKind.secondary
-                : MiButtonKind.primary,),
+              kind: t.id != verdict.templateId
+                  ? MiButtonKind.secondary
+                  : MiButtonKind.primary,
+            ),
         ],
       ),
       const SizedBox(height: MiSpace.xs),
@@ -462,7 +461,8 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
                 d.restatement = _brief.text;
                 _open();
               },
-            kind: MiButtonKind.primary,),
+        kind: MiButtonKind.primary,
+      ),
       const SizedBox(height: MiSpace.sm),
       Text(
         'The interview happens once. After this the council does not ask '

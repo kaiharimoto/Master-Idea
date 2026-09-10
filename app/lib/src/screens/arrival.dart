@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../store/sitting.dart';
 import '../update/updater.dart';
 import 'interview_proceeding.dart';
 import 'library_screen.dart';
@@ -22,6 +23,7 @@ import 'update_sheet.dart';
 class ArrivalScreen extends StatefulWidget {
   const ArrivalScreen({
     required this.library,
+    required this.sitting,
     required this.updater,
     required this.onOpenLibrary,
     required this.onOpenSettings,
@@ -32,6 +34,7 @@ class ArrivalScreen extends StatefulWidget {
   });
 
   final Library library;
+  final Sitting sitting;
   final Updater updater;
   final VoidCallback onOpenLibrary;
   final VoidCallback onOpenSettings;
@@ -77,7 +80,11 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
     if (widget.showLibrary) {
       return _framed(
         c,
-        LibraryScreen(library: widget.library, onOpened: widget.onLeaveRegion),
+        LibraryScreen(
+          library: widget.library,
+          sitting: widget.sitting,
+          onOpened: widget.onLeaveRegion,
+        ),
         title: 'Sessions',
       );
     }
@@ -162,10 +169,7 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
                 spacing: MiSpace.sm,
                 runSpacing: MiSpace.sm,
                 children: <Widget>[
-                  MiButton(
-                    label: 'Settings',
-                    onPressed: widget.onOpenSettings,
-                  ),
+                  MiButton(label: 'Settings', onPressed: widget.onOpenSettings),
                   ListenableBuilder(
                     listenable: widget.updater,
                     builder: (BuildContext context, _) => MiButton(

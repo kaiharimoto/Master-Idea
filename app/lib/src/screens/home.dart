@@ -54,6 +54,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Region _region = Region.interview;
   AppLifecycleListener? _lifecycle;
 
+  /// True while the rail is open as a sheet on a narrow window. Tracked rather
+  /// than inferred from `canPop`, which is true of any route — including a
+  /// dialog the client is reading, which choosing a region used to dismiss.
+  bool _railIsOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -72,36 +77,54 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<AppExitResponse> _confirmExit() async {
     if (!_sitting.isBusy) return AppExitResponse.exit;
-    final bool? leave = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('A sitting is in progress'),
-        content: const Text(
+    final bool leave = await showMiConfirm(
+      context,
+      title: 'A sitting is in progress',
+      body:
           'The council is still deliberating. Closing now ends the sitting '
-          'where it stands — the rounds already recorded are kept, and it can '
-          'be resumed from the barrier it reached.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Stay open'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Close anyway'),
-          ),
-        ],
-      ),
+          'where it stands — every round that has closed is kept, and it '
+          'resumes from the barrier it reached.',
+      action: 'Close anyway',
+      cancel: 'Stay open',
     );
-    return leave == true ? AppExitResponse.exit : AppExitResponse.cancel;
+    // Stopped rather than abandoned. The council runs in child processes of
+    // this one; leaving them behind would keep spending model calls on a
+    // session nobody is watching, with nothing left to write them into.
+    if (leave) _sitting.stop();
+    return leave ? AppExitResponse.exit : AppExitResponse.cancel;
   }
 
   void _go(Region r) {
     setState(() => _region = r);
     // On a narrow window the rail is a sheet, so choosing a region closes it.
-    if (!isWide(context) && Navigator.of(context).canPop()) {
+    if (_railIsOpen && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
+  }
+
+  /// One step back, for the system back gesture.
+  ///
+  /// Regions are state rather than routes, so without this the back button
+  /// leaves the application from anywhere — mid-interview, mid-sitting, with
+  /// no confirmation of any kind.
+  Future<void> _back() async {
+    if (_railIsOpen) return;
+    if (_region != Region.interview) {
+      setState(() => _region = Region.interview);
+      return;
+    }
+    final bool close = await showMiConfirm(
+      context,
+      title: 'Close this session?',
+      body: _sitting.isBusy
+          ? 'The sitting carries on; you can reopen the session from the '
+                'library at any time.'
+          : 'Nothing is lost. Everything is on this device as plain files, '
+                'and the session reopens from the library.',
+      action: 'Close it',
+      cancel: 'Stay here',
+    );
+    if (close) widget.library.close();
   }
 
   @override
@@ -114,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (open == null) {
       return ArrivalScreen(
         library: widget.library,
+        sitting: _sitting,
         updater: widget.updater,
         onOpenLibrary: () => _go(Region.library),
         onOpenSettings: () => _go(Region.settings),
@@ -126,32 +150,47 @@ class _HomeScreenState extends State<HomeScreen> {
     final Widget content = _content(open);
 
     if (!isWide(context)) {
-      return Scaffold(
-        backgroundColor: c.canvas,
-        appBar: AppBar(
+      return PopScope(
+        // Regions are state rather than routes, so the system back gesture
+        // has nothing of its own to pop and leaves the application from
+        // anywhere. Handled here instead: back steps to the interview, then
+        // asks before closing the session.
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) _back();
+        },
+        child: Scaffold(
           backgroundColor: c.canvas,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          title: Text(
-            _region.title,
-            style: MiType.heading.copyWith(color: c.ink),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.menu),
-            color: c.ink,
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              backgroundColor: c.surfaceRaised,
-              builder: (BuildContext context) =>
-                  SafeArea(child: _rail(open, sheet: true)),
+          appBar: AppBar(
+            backgroundColor: c.canvas,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            title: Text(
+              _region.title,
+              style: MiType.heading.copyWith(color: c.ink),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.menu),
+              color: c.ink,
+              tooltip: 'Regions',
+              onPressed: () async {
+                _railIsOpen = true;
+                await showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: c.surfaceRaised,
+                  builder: (BuildContext context) =>
+                      SafeArea(child: _rail(open, sheet: true)),
+                );
+                _railIsOpen = false;
+              },
+            ),
+            bottom: const PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: MiRule(),
             ),
           ),
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: MiRule(),
-          ),
+          body: content,
         ),
-        body: content,
       );
     }
 
@@ -184,13 +223,19 @@ class _HomeScreenState extends State<HomeScreen> {
       sitting: _sitting,
       session: open,
       onFinished: () => _go(Region.dossier),
+      onOpenSettings: () => _go(Region.settings),
     ),
     Region.ledger => LedgerScreen(session: open),
     Region.dossier => DossierScreen(session: open),
-    Region.assembly => AssemblyScreen(library: widget.library, session: open),
+    Region.assembly => AssemblyScreen(
+      library: widget.library,
+      sitting: _sitting,
+      session: open,
+    ),
     Region.pitch => PitchScreen(library: widget.library, session: open),
     Region.library => LibraryScreen(
       library: widget.library,
+      sitting: _sitting,
       onOpened: () => _go(Region.dossier),
     ),
     Region.settings => SettingsScreen(library: widget.library),
@@ -238,12 +283,25 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: MiSpace.sm),
             children: <Widget>[
-              for (final Region r in Region.values)
-                _railEntry(r, sheet: sheet),
+              for (final Region r in Region.values) _railEntry(r, sheet: sheet),
             ],
           ),
         ),
-        MiRule(),
+        const MiRule(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            MiSpace.lg,
+            MiSpace.md,
+            MiSpace.lg,
+            0,
+          ),
+          child: MiButton(
+            label: 'Put a new idea before the council',
+            expand: true,
+            onPressed: _newIdea,
+          ),
+        ),
+        const SizedBox(height: MiSpace.sm),
         ListenableBuilder(
           listenable: widget.updater,
           builder: (BuildContext context, _) => Padding(
@@ -263,7 +321,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 MiButton(
                   label: widget.updater.hasUpdate ? 'Update' : 'Check',
                   onPressed: () => showUpdateSheet(context, widget.updater),
-            kind: MiButtonKind.quiet,),
+                  kind: MiButtonKind.quiet,
+                ),
               ],
             ),
           ),
@@ -272,46 +331,78 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Back to the opening question.
+  ///
+  /// Without this there is no way to convene a second idea short of killing
+  /// the application: the arrival screen is shown only when no session is
+  /// open, and nothing ever closed one.
+  Future<void> _newIdea() async {
+    if (_railIsOpen && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      _railIsOpen = false;
+    }
+    if (_sitting.isBusy) {
+      final bool go = await showMiConfirm(
+        context,
+        title: 'A sitting is in progress',
+        body:
+            'It carries on while you work on something else — it never waits '
+            'on you. The session stays in the library, and its rounds keep '
+            'arriving.',
+        action: 'Start another idea',
+        cancel: 'Stay here',
+      );
+      if (!go) return;
+    }
+    widget.library.close();
+    setState(() => _region = Region.interview);
+  }
+
   Widget _railEntry(Region r, {required bool sheet}) {
     final MiColors c = MiTheme.colorsOf(context);
     final bool selected = r == _region;
     // Not a ListTile: it paints its ink on the nearest Material, which inside
     // a ruled page is the page behind it, and Flutter asserts.
-    return InkWell(
-      onTap: () => _go(r),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: MiSpace.tapTarget),
-        padding: const EdgeInsets.symmetric(
-          horizontal: MiSpace.lg,
-          vertical: MiSpace.sm,
-        ),
-        alignment: Alignment.centerLeft,
-        child: Row(
-          children: <Widget>[
-            SizedBox(
-              width: MiSpace.md,
-              child: selected
-                  ? Text('—', style: MiType.body.copyWith(color: c.ink))
-                  : null,
-            ),
-            Expanded(
-              child: Text(
-                r.title,
-                style: MiType.body.copyWith(
-                  color: selected ? c.ink : c.inkMuted,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: r.title,
+      child: InkWell(
+        onTap: () => _go(r),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: MiSpace.tapTarget),
+          padding: const EdgeInsets.symmetric(
+            horizontal: MiSpace.lg,
+            vertical: MiSpace.sm,
+          ),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: MiSpace.md,
+                child: selected
+                    ? Text('—', style: MiType.body.copyWith(color: c.ink))
+                    : null,
+              ),
+              Expanded(
+                child: Text(
+                  r.title,
+                  style: MiType.body.copyWith(
+                    color: selected ? c.ink : c.inkMuted,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-            if (r == Region.run)
-              ListenableBuilder(
-                listenable: _sitting,
-                builder: (BuildContext context, _) => Text(
-                  _sitting.isBusy ? 'in session' : '',
-                  style: MiType.caption.copyWith(color: c.inkMuted),
+              if (r == Region.run)
+                ListenableBuilder(
+                  listenable: _sitting,
+                  builder: (BuildContext context, _) => Text(
+                    _sitting.isBusy ? 'in session' : '',
+                    style: MiType.caption.copyWith(color: c.inkMuted),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
