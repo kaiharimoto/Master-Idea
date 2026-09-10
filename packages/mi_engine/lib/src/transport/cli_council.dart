@@ -162,7 +162,15 @@ class CliCouncil implements CouncilTransport {
     // The prompt goes down stdin rather than on the command line: a propose
     // turn runs to several thousand characters, and Windows refuses a command
     // line past about thirty-two thousand — through a .cmd, far less.
-    process.stdin.write(turn.prompt);
+    // Wrapped because a child that has already died makes this a broken pipe,
+    // and the useful account of what went wrong is on its stderr and in its
+    // exit code — both of which are read below. An IOException thrown from
+    // here would replace that account with a plumbing error.
+    try {
+      process.stdin.write(turn.prompt);
+    } on Object {
+      // Deliberately ignored; the exit code below says what happened.
+    }
     // `Process.start` does not close the child's stdin. Without this the CLI
     // waits for more piped input on every single turn.
     unawaited(process.stdin.close().catchError((Object _) {}));
