@@ -85,7 +85,7 @@ class DocumentView extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: MiSpace.sm),
           padding: const EdgeInsets.only(left: MiSpace.md),
           decoration: Border(
-            left: BorderSide(color: c.ruleStrong, width: 2),
+            left: BorderSide(color: c.lineStrong, width: 2),
           ).toBoxDecoration(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

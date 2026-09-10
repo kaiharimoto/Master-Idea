@@ -5,6 +5,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../app.dart';
+import '../widgets/counts.dart';
 import '../store/library.dart';
 import '../store/sitting.dart';
 import '../update/updater.dart';
@@ -126,9 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!isWide(context)) {
       return Scaffold(
-        backgroundColor: c.ground,
+        backgroundColor: c.canvas,
         appBar: AppBar(
-          backgroundColor: c.ground,
+          backgroundColor: c.canvas,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           title: Text(
@@ -140,13 +141,13 @@ class _HomeScreenState extends State<HomeScreen> {
             color: c.ink,
             onPressed: () => showModalBottomSheet<void>(
               context: context,
-              backgroundColor: c.raised,
+              backgroundColor: c.surfaceRaised,
               builder: (BuildContext context) =>
                   SafeArea(child: _rail(open, sheet: true)),
             ),
           ),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(1),
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
             child: MiRule(),
           ),
         ),
@@ -158,13 +159,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // pushed route. A push covers the rail too, which turns a 1600px window
     // into a phone page and takes the session list with it.
     return Scaffold(
-      backgroundColor: c.ground,
+      backgroundColor: c.canvas,
       body: SafeArea(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             SizedBox(width: MiSpace.railWidth, child: _rail(open)),
-            Container(width: 1, color: c.rule),
+            Container(width: 1, color: c.line),
             Expanded(child: content),
           ],
         ),
@@ -205,27 +206,34 @@ class _HomeScreenState extends State<HomeScreen> {
             MiSpace.lg,
             MiSpace.lg,
             MiSpace.lg,
-            MiSpace.sm,
+            MiSpace.md,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const MiEyebrow('Before the council'),
-              const SizedBox(height: MiSpace.xs),
-              Text(
-                open.title,
-                style: MiType.heading.copyWith(color: c.ink),
-              ),
-              const SizedBox(height: MiSpace.xs),
-              Text(
-                '${open.interview.verdict.template.name} · '
-                '${open.directions.length} directions',
-                style: MiType.caption.copyWith(color: c.inkMuted),
+              const SizedBox(height: MiSpace.sm),
+              Text(open.title, style: MiType.heading.copyWith(color: c.ink)),
+              const SizedBox(height: MiSpace.sm),
+              // A rail is 300px wide and a tier name plus a count does not
+              // always fit in it. Wrapping rather than overflowing, because a
+              // rail that reports a layout error is a rail nobody trusts.
+              Wrap(
+                spacing: MiSpace.sm,
+                runSpacing: MiSpace.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  MiTag(open.interview.verdict.template.name),
+                  Text(
+                    countOf(open.directions.length, 'direction'),
+                    style: MiType.caption.copyWith(color: c.inkMuted),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        MiRule(),
+        const MiRule(),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: MiSpace.sm),
@@ -252,10 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                MiQuietAction(
+                MiButton(
                   label: widget.updater.hasUpdate ? 'Update' : 'Check',
                   onPressed: () => showUpdateSheet(context, widget.updater),
-                ),
+            kind: MiButtonKind.quiet,),
               ],
             ),
           ),

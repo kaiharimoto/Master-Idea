@@ -222,57 +222,76 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
 
   @override
   Widget build(BuildContext context) {
-    final MiColors c = MiTheme.colorsOf(context);
     final InterviewDraft d = widget.draft;
 
     return ListenableBuilder(
       listenable: d,
       builder: (BuildContext context, _) {
         final InterviewModule? m = d.pending;
-        return SingleChildScrollView(
-          child: MiLeaf(
-            width: MiSpace.readingWidth,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: MiEyebrow(
-                        m == null
-                          ? 'The interview is finished'
-                          : 'Question ${d.asked + 1} of ${d.modules.length} · '
-                                '${m.produces.name}',
-                      ),
-                    ),
-                    MiQuietAction(
-                      label: 'Abandon',
-                      onPressed: widget.onAbandoned,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: MiSpace.lg),
-                if (m != null) ..._question(c, d, m) else ..._gate(c, d),
-                const SizedBox(height: MiSpace.xl),
-                MiRule(),
-                MiDisclosure(
-                  summary: 'What has been settled',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      for (final MapEntry<String, String> e
-                          in d.answers.entries)
-                        MiRecord(
-                          label: moduleById(e.key).name,
-                          value: e.value,
-                          style: MiType.caption,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+        final MiColors c = MiTheme.colorsOf(context);
+
+        // One question on screen, and the record of what has been settled
+        // folded away beneath it. A transcript would invite chatting, and what
+        // this stage needs is answers specific enough that a sitting can run
+        // for hours without ever having to ask.
+        return MiFocal(
+          eyebrow: m == null
+              ? 'The interview is finished'
+              : 'Question ${d.asked + 1} of ${d.modules.length} · '
+                    '${m.produces.name}',
+          question: m == null ? 'Approve the brief' : m.question,
+          supporting: m == null
+              ? 'This is the council\'s restatement of your idea. Correct it '
+                    'until it is right: once the sitting opens it is '
+                    'constitution, and nothing the council produces may '
+                    'contradict it. Nobody will ask you again.'
+              : m.whyItMatters,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: m == null ? _gate(c, d) : _question(c, d, m),
           ),
+          primary: m == null
+              ? MiButton(
+                  label: 'Close the interview and open the sitting',
+                  kind: MiButtonKind.primary,
+                  expand: true,
+                  busy: _closing,
+                  onPressed: () {
+                    d.restatement = _brief.text;
+                    _open();
+                  },
+                )
+              : (m.id == 'medium'
+                    ? null
+                    : MiButton(
+                        label: 'Record',
+                        kind: MiButtonKind.primary,
+                        expand: true,
+                        onPressed: () => _answer(m),
+                      )),
+          secondary: MiButton(
+            label: 'Abandon this interview',
+            kind: MiButtonKind.quiet,
+            expand: true,
+            onPressed: widget.onAbandoned,
+          ),
+          disclosures: <Widget>[
+            MiDisclosure(
+              label: 'What has been settled',
+              trailingNote: '${d.answers.length}',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (final MapEntry<String, String> e in d.answers.entries)
+                    MiRecord(
+                      label: moduleById(e.key).name,
+                      value: e.value,
+                      style: MiType.caption,
+                    ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
@@ -284,13 +303,6 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
     // direction rather than merely how one is worded.
     if (m.id == 'medium') {
       return <Widget>[
-        Text(m.question, style: MiType.question.copyWith(color: c.ink)),
-        const SizedBox(height: MiSpace.sm),
-        Text(
-          m.whyItMatters,
-          style: MiType.prose.copyWith(color: c.inkMuted),
-        ),
-        const SizedBox(height: MiSpace.lg),
         for (final DomainProfile p in domainProfiles)
           Padding(
             padding: const EdgeInsets.only(bottom: MiSpace.sm),
@@ -307,7 +319,7 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
                   horizontal: MiSpace.sm,
                 ),
                 decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: c.rule)),
+                  border: Border(bottom: BorderSide(color: c.line)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,26 +338,16 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
     }
 
     return <Widget>[
-      Text(m.question, style: MiType.question.copyWith(color: c.ink)),
-      const SizedBox(height: MiSpace.sm),
-      Text(m.whyItMatters, style: MiType.prose.copyWith(color: c.inkMuted)),
-      const SizedBox(height: MiSpace.lg),
       MiWriting(
         controller: _field,
         autofocus: true,
         hint: 'In your own words.',
         onSubmit: () => _answer(m),
       ),
-      const SizedBox(height: MiSpace.md),
-      Row(
-        children: <Widget>[
-          MiAction(label: 'Record', onPressed: () => _answer(m)),
-          const SizedBox(width: MiSpace.md),
-          Text(
-            MiSubmit.hintFor(context),
-            style: MiType.caption.copyWith(color: c.inkFaint),
-          ),
-        ],
+      const SizedBox(height: MiSpace.sm),
+      Text(
+        '${MiSubmit.hintFor(context)} records it.',
+        style: MiType.caption.copyWith(color: c.inkFaint),
       ),
     ];
   }
@@ -361,18 +363,6 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
         : ScaleVerdict(templateId: d.tierId, reasoning: d.tierReasoning);
 
     return <Widget>[
-      Text(
-        'Approve the brief',
-        style: MiType.question.copyWith(color: c.ink),
-      ),
-      const SizedBox(height: MiSpace.sm),
-      Text(
-        'This is the council\'s restatement of your idea. Correct it until it '
-        'is right: once the sitting opens it is constitution, and nothing the '
-        'council produces may contradict it. Nobody will ask you again.',
-        style: MiType.prose.copyWith(color: c.inkMuted),
-      ),
-      const SizedBox(height: MiSpace.lg),
       MiWriting(controller: _brief, minLines: 4, maxLines: 14),
       const SizedBox(height: MiSpace.xl),
       MiRule(),
@@ -407,9 +397,8 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
         hint: 'What the council may do about it.',
       ),
       const SizedBox(height: MiSpace.sm),
-      MiAction(
+      MiButton(
         label: 'Declare it',
-        secondary: true,
         onPressed: () {
           if (_unknown.text.trim().isEmpty) return;
           d.unknowns.add(
@@ -425,7 +414,7 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
           _licence.clear();
           setState(() {});
         },
-      ),
+            kind: MiButtonKind.secondary,),
       const SizedBox(height: MiSpace.xl),
       MiRule(),
       const SizedBox(height: MiSpace.lg),
@@ -437,9 +426,8 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
         spacing: MiSpace.sm,
         children: <Widget>[
           for (final HarnessTemplate t in harnessTemplates)
-            MiAction(
+            MiButton(
               label: t.name,
-              secondary: t.id != verdict.templateId,
               onPressed: () {
                 d
                   ..tierId = t.id
@@ -450,7 +438,9 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
                             'the council judged from their appetite.';
                 setState(() {});
               },
-            ),
+            kind: t.id != verdict.templateId
+                ? MiButtonKind.secondary
+                : MiButtonKind.primary,),
         ],
       ),
       const SizedBox(height: MiSpace.xs),
@@ -463,7 +453,7 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
         Text(_problem!, style: MiType.body.copyWith(color: c.warning)),
         const SizedBox(height: MiSpace.md),
       ],
-      MiAction(
+      MiButton(
         label: 'Close the interview and open the sitting',
         busy: _closing,
         onPressed: _closing
@@ -472,7 +462,7 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
                 d.restatement = _brief.text;
                 _open();
               },
-      ),
+            kind: MiButtonKind.primary,),
       const SizedBox(height: MiSpace.sm),
       Text(
         'The interview happens once. After this the council does not ask '

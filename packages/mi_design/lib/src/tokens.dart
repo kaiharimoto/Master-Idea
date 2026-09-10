@@ -1,92 +1,110 @@
 import 'package:flutter/widgets.dart';
 
-/// The palette: a court archive.
+/// The palette. Master Prompt's, and deliberately identical to it.
 ///
-/// Parchment-warm neutrals as the ground, ink black for text, and **a single
-/// oxblood accent reserved exclusively for verdicts and ratings**. That
-/// reservation is the whole colour system. It means judgement is the loudest
-/// thing on any screen without a chart anywhere — and it only holds if nothing
-/// else ever reaches for [accent]. `MiVerdict` is the one widget that paints
-/// with it, and `theme_test.dart` holds that as a contract.
+/// The two programs are one family, run side by side, and hand work to each
+/// other; making this one look different would be making it look unrelated.
+/// So: near-monochrome, colour reserved for the few things that genuinely
+/// need to interrupt, and everything else earning attention through spacing
+/// and weight.
 ///
-/// No gradients, no neon, no glass, nothing that reads as a contemporary AI
-/// product. A dossier is paper.
+/// **[verdict] is the one thing this half adds.** A council's whole output is
+/// judgement, and a dossier where the ratings are set in the same ink as the
+/// prose is a dossier you have to read twice to find them in. It is reserved
+/// exclusively for verdicts and ratings — `MiVerdict` is the only widget that
+/// touches it, and `treatment_test.dart` reads the source to prove nothing
+/// else does. A second place that reached for it would make the first one mean
+/// nothing.
 @immutable
 class MiColors {
   const MiColors({
-    required this.ground,
-    required this.leaf,
-    required this.raised,
-    required this.rule,
-    required this.ruleStrong,
+    required this.canvas,
+    required this.surface,
+    required this.surfaceRaised,
+    required this.line,
+    required this.lineStrong,
     required this.ink,
     required this.inkMuted,
     required this.inkFaint,
     required this.accent,
     required this.accentInk,
     required this.warning,
+    required this.danger,
+    required this.success,
+    required this.verdict,
   });
 
-  /// The page itself.
-  final Color ground;
+  /// The page.
+  final Color canvas;
 
-  /// A leaf of paper laid on the page — very slightly lighter, never a card.
-  final Color leaf;
+  /// Panels sitting on the page.
+  final Color surface;
 
-  /// Something genuinely above the page: a menu, a dialog.
-  final Color raised;
+  /// Something lifted above a panel — a menu, a dialog.
+  final Color surfaceRaised;
 
-  /// Hairline rules. **All structure comes from these.** No borders, no boxes,
-  /// no shadows, no elevation anywhere in this system.
-  final Color rule;
-  final Color ruleStrong;
+  /// Hairline rules. Structure comes from these, not from shadows.
+  final Color line;
+  final Color lineStrong;
 
+  /// Primary text.
   final Color ink;
+
+  /// Secondary text: labels, captions, metadata.
   final Color inkMuted;
+
+  /// Tertiary: placeholders, disabled.
   final Color inkFaint;
 
-  /// Oxblood. Verdicts and ratings only.
+  /// The single accent. Used sparingly enough that it always means something.
   final Color accent;
   final Color accentInk;
 
-  /// The one other colour, for a thing that is wrong rather than judged — a
-  /// run that could not reach the council. Deliberately not oxblood, so a
-  /// failure is never mistaken for a verdict.
   final Color warning;
+  final Color danger;
+  final Color success;
+
+  /// Oxblood. Verdicts and ratings, and nothing else, ever.
+  final Color verdict;
 
   static const MiColors light = MiColors(
-    ground: Color(0xFFF4F1E8),
-    leaf: Color(0xFFFAF8F2),
-    raised: Color(0xFFFDFCF8),
-    rule: Color(0xFFD9D3C3),
-    ruleStrong: Color(0xFFB3AB97),
-    ink: Color(0xFF14120E),
-    inkMuted: Color(0xFF5B564A),
-    inkFaint: Color(0xFF8B8474),
-    accent: Color(0xFF6E1F1B),
-    accentInk: Color(0xFFF4F1E8),
-    warning: Color(0xFF6B5410),
+    canvas: Color(0xFFFBFBFA),
+    surface: Color(0xFFFFFFFF),
+    surfaceRaised: Color(0xFFFFFFFF),
+    line: Color(0xFFE6E5E1),
+    lineStrong: Color(0xFFCFCEC8),
+    ink: Color(0xFF17181A),
+    inkMuted: Color(0xFF6B6C70),
+    inkFaint: Color(0xFF9B9CA0),
+    accent: Color(0xFF1A1B1E),
+    accentInk: Color(0xFFFFFFFF),
+    warning: Color(0xFF8A5A00),
+    danger: Color(0xFF9B2C1F),
+    success: Color(0xFF1F6B3C),
+    verdict: Color(0xFF6E1F1B),
   );
 
-  /// Lamplight rather than a screen: the same archive after dark, warm and
-  /// low. The accent lifts, because oxblood on near-black is unreadable at the
-  /// weight a verdict is set in — it stays the only colour on the page.
   static const MiColors dark = MiColors(
-    ground: Color(0xFF14130F),
-    leaf: Color(0xFF1B1A15),
-    raised: Color(0xFF23211B),
-    rule: Color(0xFF34312A),
-    ruleStrong: Color(0xFF4E4A40),
-    ink: Color(0xFFEDE8DA),
-    inkMuted: Color(0xFFA49C89),
-    inkFaint: Color(0xFF77705F),
-    accent: Color(0xFFC4665C),
-    accentInk: Color(0xFF14130F),
-    warning: Color(0xFFC9A544),
+    canvas: Color(0xFF0E0F11),
+    surface: Color(0xFF16181B),
+    surfaceRaised: Color(0xFF1D2024),
+    line: Color(0xFF262A2F),
+    lineStrong: Color(0xFF3A3F46),
+    ink: Color(0xFFECEDEE),
+    inkMuted: Color(0xFF9DA1A7),
+    inkFaint: Color(0xFF6A6E75),
+    accent: Color(0xFFECEDEE),
+    accentInk: Color(0xFF0E0F11),
+    warning: Color(0xFFE0A93C),
+    danger: Color(0xFFE0705F),
+    success: Color(0xFF5FBF8A),
+    // Lifted, because oxblood on near-black is unreadable at the weight a
+    // verdict is set in. Still the only colour of its kind on the page.
+    verdict: Color(0xFFC4665C),
   );
 }
 
-/// An 8-point scale. Every gap in the app is one of these.
+/// An 8-point spacing scale. Every gap in the app is one of these.
 abstract final class MiSpace {
   static const double xs = 4;
   static const double sm = 8;
@@ -94,101 +112,130 @@ abstract final class MiSpace {
   static const double lg = 24;
   static const double xl = 32;
   static const double xxl = 48;
-  static const double xxxl = 72;
+  static const double xxxl = 64;
 
-  /// A measure you can read a case file across without losing the line.
-  static const double readingWidth = 660;
+  /// Comfortable measure for long prose. Beyond this, lines get hard to track.
+  /// Narrower than before: the type is larger, so fewer characters fit before a
+  /// line becomes tiring to track back from.
+  static const double readingWidth = 620;
 
-  /// The widest a document region is set. A dossier at 1600px full-bleed is
-  /// unreadable; the page stays a page and the window grows around it.
-  static const double documentWidth = 860;
+  /// For a screen that is a conversation rather than a single question.
+  ///
+  /// Still a measure you can read a paragraph across, but not a phone column
+  /// stranded in the middle of a widescreen window with a composer, a reply
+  /// and a set of notices all sharing it.
+  static const double conversationWidth = 820;
 
-  /// Minimum height of anything tappable.
-  static const double tapTarget = 52;
+  /// Minimum height of anything tappable. Comfortably above the 48dp floor,
+  /// because the primary action on a screen should be hard to miss.
+  static const double tapTarget = 56;
 
-  /// The width of the rail on a desktop window.
+  /// The width of the rail on a wide window.
   static const double railWidth = 300;
 
-  /// Below this the app is one column and destinations are pushed routes.
-  /// A *layout* gate, never a platform check — those are different questions.
+  /// Below this the app is one column and destinations are pushed routes. A
+  /// *layout* gate, never a platform check — those are different questions.
   static const double wideGate = 900;
 }
 
-/// Type, in Source Serif 4.
+abstract final class MiRadius {
+  static const Radius sm = Radius.circular(4);
+  static const Radius md = Radius.circular(8);
+  static const BorderRadius card = BorderRadius.all(md);
+  static const BorderRadius chip = BorderRadius.all(sm);
+}
+
+/// Type scale, in Inter.
 ///
-/// A serif throughout, including labels and controls. That is the treatment
-/// rather than a preference: this app is a proceeding whose output is a
-/// document, and a grotesque interface wrapped around a serif document reads
-/// as a web app that renders a PDF. The archive sets everything in one voice.
+/// Sized for a phone held at arm's length rather than a desktop leaned into.
+/// The first build was set at 14px body with 11px secondary text, which read as
+/// a dashboard shrunk onto a handset; everything here is roughly a fifth larger
+/// with weight to match, so a screen carries less and says it more plainly.
+///
+/// Medium (500) is the working weight and the reason Inter was chosen — it is
+/// the neo-grotesque that actually ships a real 500. Regular is kept for long
+/// prose, where medium is tiring to read at length.
 abstract final class MiType {
-  static const String family = 'SourceSerif';
+  static const String family = 'Inter';
   static const String package = 'mi_design';
 
   /// How the font is registered once Flutter has loaded it from this package.
-  /// [ThemeData] takes a family name and no package, so it needs this form.
+  /// [ThemeData] takes a family name and no package, so it needs this form —
+  /// the unqualified name resolves to nothing and falls through to the
+  /// platform sans *silently*, which sets the same screen in Roboto on Android
+  /// and Segoe on Windows with no error anywhere.
   static const String themeFamily = 'packages/$package/$family';
 
   static const TextStyle _base = TextStyle(
     fontFamily: family,
     package: package,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w500,
     height: 1.45,
     letterSpacing: 0,
   );
 
-  /// The one line a screen is about.
+  /// The one line a screen is actually about. Never more than a sentence.
   static TextStyle get question => _base.copyWith(
-    fontSize: 28,
-    height: 1.2,
-    letterSpacing: -0.2,
+    fontSize: 30,
+    height: 1.16,
+    letterSpacing: -0.7,
     fontWeight: FontWeight.w600,
   );
 
   static TextStyle get display => _base.copyWith(
-    fontSize: 24,
-    height: 1.22,
+    fontSize: 26,
+    height: 1.2,
+    letterSpacing: -0.5,
     fontWeight: FontWeight.w600,
   );
 
-  static TextStyle get title =>
-      _base.copyWith(fontSize: 20, height: 1.28, fontWeight: FontWeight.w600);
+  static TextStyle get title => _base.copyWith(
+    fontSize: 21,
+    height: 1.25,
+    letterSpacing: -0.3,
+    fontWeight: FontWeight.w600,
+  );
 
-  static TextStyle get heading =>
-      _base.copyWith(fontSize: 17, height: 1.32, fontWeight: FontWeight.w600);
+  static TextStyle get heading => _base.copyWith(
+    fontSize: 17,
+    height: 1.3,
+    letterSpacing: -0.1,
+    fontWeight: FontWeight.w600,
+  );
 
-  static TextStyle get body => _base.copyWith(fontSize: 17, height: 1.45);
+  static TextStyle get body => _base.copyWith(fontSize: 17, height: 1.4);
 
-  /// Long-form reading — a direction's statement, the brief, the pitch.
-  static TextStyle get prose => _base.copyWith(fontSize: 17, height: 1.62);
+  /// Long-form reading: regular weight, looser leading.
+  static TextStyle get prose =>
+      _base.copyWith(fontSize: 16, fontWeight: FontWeight.w400, height: 1.6);
 
   static TextStyle get label =>
-      _base.copyWith(fontSize: 15, height: 1.35, color: null);
+      _base.copyWith(fontSize: 14, height: 1.35, letterSpacing: 0.05);
 
-  static TextStyle get caption => _base.copyWith(fontSize: 14, height: 1.4);
+  static TextStyle get caption =>
+      _base.copyWith(fontSize: 13, height: 1.4, fontWeight: FontWeight.w400);
 
-  /// Section marks and record labels, set in small tracked caps — the archive's
-  /// own hand for saying what a thing is.
+  /// Step indicators and section marks. Tracked, because it is set in caps.
   static TextStyle get eyebrow => _base.copyWith(
     fontSize: 12,
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
     height: 1.2,
     fontWeight: FontWeight.w600,
   );
 
-  /// A verdict. Set in the same serif at reading size, never larger — the
-  /// colour is what carries it, and a verdict shouted in display type would be
-  /// the closest thing this design has to a chart.
-  static TextStyle get verdict => _base.copyWith(
-    fontSize: 17,
-    height: 1.35,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.2,
+  /// Counters and durations. Tabular figures so digits do not jitter as they
+  /// tick — a countdown that shifts sideways every second is maddening.
+  static TextStyle get numeric => _base.copyWith(
+    fontSize: 16,
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
   );
 
-  /// Ids, hashes and file paths. The one place a monospace appears.
-  static const TextStyle mono = TextStyle(
-    fontFamily: 'monospace',
-    fontSize: 13,
-    height: 1.5,
-  );
+  /// A verdict. Reading size, never larger: the colour is what carries it, and
+  /// a verdict set in display type would be the closest thing this design has
+  /// to a chart.
+  static TextStyle get verdict =>
+      _base.copyWith(fontSize: 17, height: 1.35, fontWeight: FontWeight.w600);
+
+  static TextStyle get mono =>
+      const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5);
 }

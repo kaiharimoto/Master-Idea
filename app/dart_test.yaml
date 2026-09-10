@@ -1,0 +1,15 @@
+# Screenshots are for looking at, not for failing a build on.
+#
+# `shots_test.dart` renders the real screens to `test/shots/` so a design can be
+# judged by eye — it found two defects the moment it was first run, a `null /`
+# in a section header and a dissent label printing its own interpolation.
+# Neither would ever have failed an assertion.
+#
+# It is skipped by default because font rasterisation differs between machines,
+# so comparing these pixel for pixel on a runner would go red for reasons that
+# have nothing to do with the design. Regenerate and look at them with:
+#
+#     flutter test --tags shots --update-goldens
+tags:
+  shots:
+    skip: "Rendered on demand: flutter test --tags shots --update-goldens"

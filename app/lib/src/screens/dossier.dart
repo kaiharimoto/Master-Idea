@@ -18,27 +18,18 @@ class DossierScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final MiColors c = MiTheme.colorsOf(context);
     if (session.directions.isEmpty) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: MiSpace.readingWidth),
-          child: Padding(
-            padding: const EdgeInsets.all(MiSpace.xl),
-            child: Text(
-              'The case file is empty until the council has proposed and rated '
-              'something. Nothing is written here that a seat did not say.',
-              style: MiType.prose.copyWith(color: c.inkMuted),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+      return const MiEmpty(
+        title: 'The case file is empty',
+        detail:
+            'Nothing is written here that a seat did not say, so it fills as '
+            'the council proposes and rates rather than at the end.',
       );
     }
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: MiSpace.documentWidth),
+        constraints: const BoxConstraints(maxWidth: MiSpace.conversationWidth),
         child: DocumentView(DossierRenderer.render(session)),
       ),
     );

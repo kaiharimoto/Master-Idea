@@ -65,10 +65,13 @@ Both clients exist and are built by CI on every push, published to the rolling
 `dev` release: a signed APK and a per-user Windows installer, with the portable
 zip alongside it.
 
-- **`packages/mi_design`** — the court archive treatment. Parchment ground, ink
-  text, one oxblood accent reachable through exactly one widget, rule lines
-  instead of boxes, and Source Serif 4 committed so the same document is set
-  the same way on both platforms.
+- **`packages/mi_design`** — Master Prompt's design system, adopted whole: the
+  same Inter at the same scale, the same near-monochrome palette, the same
+  hairline-ruled panels and the same `MiFocal` shape for a screen that asks one
+  question. One colour is added, `MiColors.verdict`, an oxblood that exactly
+  one widget may touch. The first treatment was a parchment-and-serif "court
+  archive"; it looked like a different program, which for two halves of one
+  pair is the wrong answer however handsome it is.
 - **`app/`** — one Flutter application, two platform folders. Seven regions:
   interview, sitting, coverage ledger, dossier, assembly, pitch, sessions —
   plus settings and the update sheet. The dossier, the ledger and the pitch all

@@ -175,13 +175,13 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
               Text(_problem!, style: MiType.body.copyWith(color: c.warning)),
               const SizedBox(height: MiSpace.md),
             ],
-            MiAction(
+            MiButton(
               label: integration == null
                   ? 'Compute what they become'
                   : 'Compute it again',
               busy: _computing,
               onPressed: s.selection.isEmpty || _computing ? null : _integrate,
-            ),
+            kind: MiButtonKind.primary,),
             const SizedBox(height: MiSpace.xxl),
           ],
         ),
@@ -196,7 +196,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: MiSpace.sm),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.rule)),
+        border: Border(bottom: BorderSide(color: c.line)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -25,8 +25,8 @@ packages/mi_core/     Council, session record, invariants, renderers.
                       Pure Dart. No Flutter, no dart:io.
 packages/mi_engine/   Session store on disk, Claude CLI transport, headless
                       entry point. dart:io only. No Flutter.
-packages/mi_design/   The court archive treatment: tokens, theme, primitives.
-                      Flutter.
+packages/mi_design/   Master Prompt's design system, in the same Inter at the
+                      same scale, plus one reserved colour. Flutter.
 app/                  The Flutter app for Android and Windows.
 ```
 
@@ -149,17 +149,36 @@ identical records — but six hours of it is six hours of a person copying, and
 claiming the desktop's autonomy for that would be the one platform difference
 that matters being papered over.
 
-**Oxblood is reachable through exactly one widget.** `MiVerdict` is the only
-thing in `mi_design` that touches `accent`, and `treatment_test.dart` reads the
-source to prove it. The Material theme is handed ink as its `primary` for the
+**The design system is Master Prompt's, deliberately.** Same Inter, same
+near-monochrome palette, same 8-point grid, same hairline-ruled panels, same
+`MiFocal` shape for a screen that asks one question. The two programs are one
+family, run side by side, and hand work to each other; a different look would
+be a claim that they are unrelated. `treatment_test.dart` checks the tokens
+against the other half's actual numbers rather than against a memory of them,
+so they cannot drift apart one commit at a time.
+
+**One colour is added, and exactly one widget may touch it.**
+`MiColors.verdict` is oxblood, for verdicts and ratings and nothing else — a
+council's entire output is judgement, and a dossier that sets its ratings in
+the same ink as its prose is one you have to read twice to find them in.
+`MiVerdict` is the only widget that reaches it, and the test reads the source
+to prove nothing else does. Material is handed *ink* as its `primary` for the
 same reason: a stock widget reaching for `primary` would otherwise paint
 something verdict-coloured that is not a verdict.
 
 **The font is committed and the theme names it package-qualified.**
-`packages/mi_design/SourceSerif`, not `SourceSerif` — the unqualified name
-resolves to nothing and falls through to the platform serif *silently*, which
-sets the same dossier in Noto on Android and Georgia on Windows with no error
-anywhere.
+`packages/mi_design/Inter`, not `Inter` — the unqualified name resolves to
+nothing and falls through to the platform sans *silently*, which sets the same
+screen in Roboto on Android and Segoe on Windows with no error anywhere.
+
+**Look at the screens, do not reason about them.**
+`flutter test --tags shots --update-goldens` renders the real regions to
+`app/test/shots/`. It found two defects on its first run — a section header
+printing `null /` and a dissent label printing its own interpolation — and
+neither would ever have failed an assertion. The shots are skipped in an
+ordinary run, because font rasterisation differs between machines and pixel
+comparison on a runner goes red for reasons that have nothing to do with the
+design.
 
 **CompanyName and ProductName in `Runner.rc` are load-bearing.**
 `path_provider_windows` builds `getApplicationSupportDirectory()` as
@@ -200,6 +219,15 @@ otherwise, and that is the branch a desktop actually runs.
 - Every judgement call made in the client's absence goes in
   `docs/decisions/` at the moment it is made. A decision log written at the end
   as a summary is a failure condition, not a late delivery.
+
+## The mark
+
+`tool/make_icon.py` generates the icon and is committed alongside what it
+produces. **The letter is I, and Master Prompt's is P** — same ink, same Inter,
+same hairline rule under the initial, because they are one family and the
+initial is the only thing that should tell them apart in a taskbar. The two
+scripts are the same file with one constant changed; keeping them in step by
+hand is the point.
 
 ## The loop
 

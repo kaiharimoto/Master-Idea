@@ -20,7 +20,7 @@ Future<void> showUpdateSheet(BuildContext context, Updater updater) {
   if (!updater.busy) unawaited(updater.runCheck());
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: c.raised,
+    backgroundColor: c.surfaceRaised,
     isScrollControlled: true,
     builder: (BuildContext context) =>
         SafeArea(child: _UpdateSheet(updater: updater)),
@@ -52,16 +52,39 @@ class _UpdateSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const MiEyebrow('Updates'),
+              const MiSectionHeader(title: 'Updates'),
               const SizedBox(height: MiSpace.md),
-              MiRecord(label: 'Running', value: BuildInfo.label),
-              if (asset != null)
-                MiRecord(
-                  label: 'Published',
-                  value:
-                      '${asset.label(BuildInfo.version)}  ${asset.size}'.trim(),
+              MiPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    MiField(
+                      label: 'Running',
+                      child: Text(
+                        BuildInfo.label,
+                        style: MiType.numeric.copyWith(color: c.ink),
+                      ),
+                    ),
+                    if (asset != null) ...<Widget>[
+                      const SizedBox(height: MiSpace.md),
+                      MiField(
+                        label: 'Published',
+                        child: Text(
+                          '${asset.label(BuildInfo.version)}  ${asset.size}'
+                              .trim(),
+                          style: MiType.numeric.copyWith(color: c.ink),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              const SizedBox(height: MiSpace.sm),
+              ),
+              const SizedBox(height: MiSpace.md),
+              if (updater.phase == UpdatePhase.downloading &&
+                  updater.progress >= 0) ...<Widget>[
+                MiMeter(value: updater.progress),
+                const SizedBox(height: MiSpace.sm),
+              ],
               Text(
                 switch (updater.phase) {
                   UpdatePhase.checking => 'Reading the release page…',
@@ -76,17 +99,23 @@ class _UpdateSheet extends StatelessWidget {
                 style: MiType.prose.copyWith(color: c.ink),
               ),
               if (updater.error != null) ...<Widget>[
-                const SizedBox(height: MiSpace.sm),
-                Text(
-                  updater.error!,
-                  style: MiType.body.copyWith(color: c.warning),
+                const SizedBox(height: MiSpace.md),
+                MiPanel(
+                  accent: c.danger,
+                  child: Text(
+                    updater.error!,
+                    style: MiType.prose.copyWith(color: c.ink),
+                  ),
                 ),
               ],
               if (updater.handoff != null) ...<Widget>[
-                const SizedBox(height: MiSpace.sm),
-                Text(
-                  updater.handoff!,
-                  style: MiType.body.copyWith(color: c.ink),
+                const SizedBox(height: MiSpace.md),
+                MiPanel(
+                  accent: c.ink,
+                  child: Text(
+                    updater.handoff!,
+                    style: MiType.prose.copyWith(color: c.ink),
+                  ),
                 ),
               ],
               const SizedBox(height: MiSpace.lg),
@@ -95,25 +124,24 @@ class _UpdateSheet extends StatelessWidget {
                 runSpacing: MiSpace.sm,
                 children: <Widget>[
                   if (updater.hasUpdate && updater.file == null)
-                    MiAction(
+                    MiButton(
                       label: 'Download',
                       busy: updater.phase == UpdatePhase.downloading,
                       onPressed: updater.busy ? null : updater.download,
-                    ),
+            kind: MiButtonKind.primary,),
                   if (updater.file != null)
-                    MiAction(
+                    MiButton(
                       label: 'Install',
                       busy: updater.phase == UpdatePhase.installing,
                       onPressed: updater.busy || updater.quitting
                           ? null
                           : updater.install,
-                    ),
-                  MiAction(
+            kind: MiButtonKind.primary,),
+                  MiButton(
                     label: 'Check again',
-                    secondary: true,
                     busy: updater.phase == UpdatePhase.checking,
                     onPressed: updater.busy ? null : updater.runCheck,
-                  ),
+            kind: MiButtonKind.secondary,),
                 ],
               ),
               const SizedBox(height: MiSpace.md),

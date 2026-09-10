@@ -58,7 +58,8 @@ void main() {
         reason:
             'A pushed route covers the rail too, which turns a 1600px window '
             'into a phone page and takes the session with it.');
-    expect(find.text('Appearance'), findsOneWidget);
+    // Section marks are set in the family's small caps, in both halves.
+    expect(find.text('APPEARANCE'), findsOneWidget);
   });
 
   testWidgets('the narrow layout is the one below the gate', (

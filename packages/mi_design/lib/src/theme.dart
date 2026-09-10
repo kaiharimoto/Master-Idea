@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'tokens.dart';
 
 /// Makes the palette available below it without threading it through every
-/// constructor.
+/// widget constructor.
 class MiTheme extends InheritedWidget {
   const MiTheme({
     required this.colors,
@@ -20,10 +20,11 @@ class MiTheme extends InheritedWidget {
 
   /// The palette for this subtree.
   ///
-  /// Falls back to the ambient [Theme] brightness rather than asserting.
-  /// Dialogs, sheets and pushed routes build from the [Navigator], which can
-  /// sit above wherever [MiTheme] was inserted — an assertion there turns a
-  /// layout detail into a crash in the places hardest to reach from a test.
+  /// Falls back to deriving from the ambient [Theme] brightness rather than
+  /// asserting. Dialogs, bottom sheets and pushed routes are built from the
+  /// [Navigator], which can sit above wherever [MiTheme] was inserted — an
+  /// assertion there turns a layout detail into a crash in exactly the places
+  /// that are hardest to reach in a test.
   static MiColors colorsOf(BuildContext context) {
     final MiTheme? t = maybeOf(context);
     if (t != null) return t.colors;
@@ -37,14 +38,13 @@ class MiTheme extends InheritedWidget {
       oldWidget.colors != colors || oldWidget.isDark != isDark;
 }
 
-/// Builds the Material theme from the tokens, so a stock widget that slips in
-/// still arrives in the archive's own voice.
+/// Builds the Material theme from the tokens, so stock widgets inherit the
+/// same typography and palette as the custom ones.
 ///
-/// Three things here are the treatment rather than taste, and undoing any of
-/// them undoes it: **no elevation anywhere**, so structure can only come from
-/// rules and spacing; **the accent is never handed to Material**, so no stock
-/// widget can reach for oxblood on its own and quietly make it mean nothing;
-/// and splashes are off, because ink does not ripple.
+/// `verdict` is never handed to Material. A stock widget reaching for
+/// `primary` would otherwise be able to paint something verdict-coloured that
+/// is not a verdict, which is the reservation broken by accident rather than
+/// by intent.
 ThemeData buildMiTheme(MiColors c, {required bool dark}) {
   final TextTheme text = TextTheme(
     displaySmall: MiType.display.copyWith(color: c.ink),
@@ -59,67 +59,61 @@ ThemeData buildMiTheme(MiColors c, {required bool dark}) {
   return ThemeData(
     useMaterial3: true,
     brightness: dark ? Brightness.dark : Brightness.light,
-    scaffoldBackgroundColor: c.ground,
-    canvasColor: c.ground,
+    scaffoldBackgroundColor: c.canvas,
+    canvasColor: c.canvas,
     // The package-qualified name, which is what a font declared by a package
-    // is actually registered as. `MiType.family` alone resolves to nothing and
-    // silently falls through to the platform serif — the same treatment, set
-    // in a different face on each platform, which is the failure this vendored
-    // font exists to prevent.
+    // is actually registered as.
     fontFamily: MiType.themeFamily,
-    fontFamilyFallback: const <String>['Georgia', 'Noto Serif', 'serif'],
+    fontFamilyFallback: const <String>['Roboto', 'Segoe UI', 'sans-serif'],
     textTheme: text,
     colorScheme: ColorScheme(
       brightness: dark ? Brightness.dark : Brightness.light,
-      // Ink, not oxblood. A Material widget that reaches for `primary` must
-      // not be able to paint a verdict-coloured thing that is not a verdict.
-      primary: c.ink,
-      onPrimary: c.ground,
+      primary: c.accent,
+      onPrimary: c.accentInk,
       secondary: c.inkMuted,
-      onSecondary: c.ground,
-      error: c.warning,
-      onError: c.ground,
-      surface: c.leaf,
+      onSecondary: c.canvas,
+      error: c.danger,
+      onError: c.accentInk,
+      surface: c.surface,
       onSurface: c.ink,
     ),
-    dividerTheme: DividerThemeData(color: c.rule, thickness: 1, space: 1),
+    dividerTheme: DividerThemeData(color: c.line, thickness: 1, space: 1),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
+    // Structure comes from hairlines and spacing, never from drop shadows.
     cardTheme: CardThemeData(
       elevation: 0,
-      color: c.leaf,
-      shape: const RoundedRectangleBorder(),
-    ),
-    dialogTheme: DialogThemeData(
-      elevation: 0,
-      backgroundColor: c.raised,
-      shape: RoundedRectangleBorder(side: BorderSide(color: c.ruleStrong)),
-    ),
-    bottomSheetTheme: BottomSheetThemeData(
-      elevation: 0,
-      backgroundColor: c.raised,
-      shape: const RoundedRectangleBorder(),
+      color: c.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: MiRadius.card,
+        side: BorderSide(color: c.line),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.leaf,
+      fillColor: c.surface,
       hintStyle: MiType.body.copyWith(color: c.inkFaint),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: MiSpace.md,
-        vertical: MiSpace.sm + 4,
+        vertical: MiSpace.sm + 2,
       ),
-      // A rule under the field, not a box around it. A form of boxes is the
-      // fastest way for this to start reading as a web app.
-      border: UnderlineInputBorder(borderSide: BorderSide(color: c.rule)),
-      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.rule)),
-      focusedBorder: UnderlineInputBorder(
-        borderSide: BorderSide(color: c.ruleStrong, width: 1.5),
+      border: OutlineInputBorder(
+        borderRadius: MiRadius.card,
+        borderSide: BorderSide(color: c.line),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: MiRadius.card,
+        borderSide: BorderSide(color: c.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: MiRadius.card,
+        borderSide: BorderSide(color: c.lineStrong, width: 1.5),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: c.ink,
-      contentTextStyle: MiType.body.copyWith(color: c.ground),
-      behavior: SnackBarBehavior.fixed,
+      contentTextStyle: MiType.body.copyWith(color: c.canvas),
+      behavior: SnackBarBehavior.floating,
     ),
   );
 }

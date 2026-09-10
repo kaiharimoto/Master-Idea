@@ -25,20 +25,12 @@ class PitchScreen extends StatelessWidget {
     final String pitch = s.pitch;
 
     if (pitch.isEmpty) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: MiSpace.readingWidth),
-          child: Padding(
-            padding: const EdgeInsets.all(MiSpace.xl),
-            child: Text(
-              'There is no pitch yet. Select directions in Assembly and have '
-              'the council compute what they become together — the pitch is '
-              'made of that, and of nothing the client did not choose.',
-              style: MiType.prose.copyWith(color: c.inkMuted),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+      return const MiEmpty(
+        title: 'There is no pitch yet',
+        detail:
+            'Select directions in Assembly and have the council compute what '
+            'they become together. The pitch is made of that, and of nothing '
+            'the client did not choose.',
       );
     }
 
@@ -53,11 +45,11 @@ class PitchScreen extends StatelessWidget {
             const SizedBox(height: MiSpace.sm),
             Row(
               children: <Widget>[
-                MiAction(
+                MiButton(
                   label: 'Copy the whole thing',
                   onPressed: () =>
                       Clipboard.setData(ClipboardData(text: pitch)),
-                ),
+            kind: MiButtonKind.primary,),
                 const SizedBox(width: MiSpace.md),
                 Expanded(
                   child: Text(

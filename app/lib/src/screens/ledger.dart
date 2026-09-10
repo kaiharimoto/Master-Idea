@@ -16,34 +16,21 @@ class LedgerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final MiColors c = MiTheme.colorsOf(context);
     if (session.ledger.territories.isEmpty) {
-      return _nothingYet(
-        c,
-        'The map is drawn at each barrier, so it fills as the sitting runs '
-        'rather than at the end. Nothing has been mapped yet.',
+      return const MiEmpty(
+        title: 'Nothing has been mapped yet',
+        detail:
+            'The cartographer draws the map at each barrier, so it fills as '
+            'the sitting runs. Its edges are the point: what was entered, what '
+            'was deliberately left, and what is still open.',
       );
     }
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: MiSpace.documentWidth),
+        constraints: const BoxConstraints(maxWidth: MiSpace.conversationWidth),
         child: DocumentView(LedgerRenderer.render(session)),
       ),
     );
   }
 }
-
-Widget _nothingYet(MiColors c, String what) => Center(
-  child: ConstrainedBox(
-    constraints: const BoxConstraints(maxWidth: MiSpace.readingWidth),
-    child: Padding(
-      padding: const EdgeInsets.all(MiSpace.xl),
-      child: Text(
-        what,
-        style: MiType.prose.copyWith(color: c.inkMuted),
-        textAlign: TextAlign.center,
-      ),
-    ),
-  ),
-);

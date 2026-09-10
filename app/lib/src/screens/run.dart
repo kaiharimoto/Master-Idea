@@ -71,66 +71,84 @@ class _RunScreenState extends State<RunScreen> {
         return SingleChildScrollView(
           child: MiLeaf(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                MiEyebrow(_status(s)),
-                const SizedBox(height: MiSpace.md),
-                Text(
-                  session.interview.verdict.template.name,
-                  style: MiType.display.copyWith(color: c.ink),
+                MiSectionHeader(
+                  title: session.interview.verdict.template.name,
+                  subtitle: session.interview.verdict.template.expectation,
+                  trailing: MiTag(
+                    _status(s),
+                    tone: switch (s.phase) {
+                      SittingPhase.failed => c.danger,
+                      SittingPhase.finished => c.success,
+                      _ => c.inkMuted,
+                    },
+                  ),
                 ),
-                const SizedBox(height: MiSpace.xs),
-                Text(
-                  session.interview.verdict.template.expectation,
-                  style: MiType.prose.copyWith(color: c.inkMuted),
-                ),
-                const SizedBox(height: MiSpace.lg),
-                MiRule(strong: true),
                 const SizedBox(height: MiSpace.lg),
 
                 // What has actually accumulated. Counts of things that exist,
                 // never a fraction of a total nobody can know: the sitting
-                // ends when it runs dry, so there is no denominator.
-                Wrap(
-                  spacing: MiSpace.xxl,
-                  runSpacing: MiSpace.md,
-                  children: <Widget>[
-                    MiRecord(
-                      label: 'Rounds closed',
-                      value: '${session.rounds.length}',
-                    ),
-                    MiRecord(
-                      label: 'Directions held',
-                      value: '${session.directions.length}',
-                    ),
-                    MiRecord(
-                      label: 'Verdicts recorded',
-                      value: '${session.ratings.length}',
-                    ),
-                    MiRecord(
-                      label: 'Territory mapped',
-                      value: '${session.ledger.territories.length}',
-                    ),
-                  ],
+                // ends when it runs dry, so there is no denominator — and a
+                // progress bar here would be a claim nobody can make.
+                MiPanel(
+                  child: Wrap(
+                    spacing: MiSpace.xxl,
+                    runSpacing: MiSpace.md,
+                    children: <Widget>[
+                      MiField(
+                        label: 'Rounds closed',
+                        child: Text(
+                          '${session.rounds.length}',
+                          style: MiType.numeric.copyWith(color: c.ink),
+                        ),
+                      ),
+                      MiField(
+                        label: 'Directions held',
+                        child: Text(
+                          '${session.directions.length}',
+                          style: MiType.numeric.copyWith(color: c.ink),
+                        ),
+                      ),
+                      MiField(
+                        label: 'Verdicts recorded',
+                        child: Text(
+                          '${session.ratings.length}',
+                          style: MiType.numeric.copyWith(color: c.ink),
+                        ),
+                      ),
+                      MiField(
+                        label: 'Territory mapped',
+                        child: Text(
+                          '${session.ledger.territories.length}',
+                          style: MiType.numeric.copyWith(color: c.ink),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: MiSpace.lg),
-                MiRule(),
                 const SizedBox(height: MiSpace.lg),
 
                 if (carrying != null) ..._carry(c, s, carrying),
+
                 if (s.problem != null) ...<Widget>[
-                  Text(
-                    s.problem!,
-                    style: MiType.body.copyWith(color: c.warning),
+                  MiPanel(
+                    accent: c.danger,
+                    child: Text(
+                      s.problem!,
+                      style: MiType.prose.copyWith(color: c.ink),
+                    ),
                   ),
                   const SizedBox(height: MiSpace.md),
                 ],
 
                 if (!s.isBusy) ...<Widget>[
-                  MiAction(
+                  MiButton(
                     label: session.rounds.isEmpty
                         ? 'Open the sitting'
                         : 'Resume from round ${session.rounds.length + 1}',
+                    kind: MiButtonKind.primary,
+                    expand: true,
                     onPressed: _begin,
                   ),
                   const SizedBox(height: MiSpace.sm),
@@ -147,15 +165,17 @@ class _RunScreenState extends State<RunScreen> {
                     style: MiType.caption.copyWith(color: c.inkMuted),
                   ),
                 ] else if (s.route == SittingRoute.handover)
-                  MiAction(
+                  MiButton(
                     label: 'Stop the sitting',
-                    secondary: true,
+                    expand: true,
                     onPressed: s.stop,
                   ),
 
-                const SizedBox(height: MiSpace.xl),
+                const SizedBox(height: MiSpace.lg),
+                const MiRule(),
                 MiDisclosure(
-                  summary: 'What the council has been doing',
+                  label: 'What the council has been doing',
+                  trailingNote: s.events.isEmpty ? null : '${s.events.length}',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -196,43 +216,61 @@ class _RunScreenState extends State<RunScreen> {
   List<Widget> _carry(MiColors c, Sitting s, CouncilTurn turn) {
     final HandoverCouncil? hand = s.hand;
     return <Widget>[
-      MiRecord(label: 'Seat', value: turn.agent.id),
-      MiRecord(label: 'Asked to', value: turn.purpose),
-      const SizedBox(height: MiSpace.sm),
-      MiAction(
-        label: 'Copy this turn',
-        onPressed: () => Clipboard.setData(ClipboardData(text: turn.prompt)),
+      MiPanel(
+        accent: c.ink,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                MiTag(turn.purpose),
+                const SizedBox(width: MiSpace.sm),
+                Expanded(
+                  child: Text(
+                    turn.agent.id,
+                    style: MiType.mono.copyWith(color: c.inkMuted),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: MiSpace.md),
+            MiButton(
+              label: 'Copy this turn',
+              kind: MiButtonKind.primary,
+              expand: true,
+              onPressed: () =>
+                  Clipboard.setData(ClipboardData(text: turn.prompt)),
+            ),
+            const SizedBox(height: MiSpace.sm),
+            Text(
+              'Paste it into your chat app, then bring the whole reply back '
+              'here. A reply that arrived by hand has no more authority than '
+              'one that came down a pipe: it is read by the same parser and '
+              'held to the same invariants.',
+              style: MiType.caption.copyWith(color: c.inkMuted),
+            ),
+            const SizedBox(height: MiSpace.md),
+            MiWriting(
+              controller: _reply,
+              hint: 'Everything the reply said.',
+              onSubmit: () => _bringBack(hand),
+            ),
+            const SizedBox(height: MiSpace.sm),
+            MiButton(
+              label: 'Bring it back',
+              expand: true,
+              onPressed: () => _bringBack(hand),
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: MiSpace.md),
-      Text(
-        'Paste it into your chat app, then bring the whole reply back here. '
-        'A reply that arrived by hand has no more authority than one that came '
-        'down a pipe: it is read by the same parser and held to the same '
-        'invariants.',
-        style: MiType.caption.copyWith(color: c.inkMuted),
-      ),
-      const SizedBox(height: MiSpace.md),
-      MiWriting(
-        controller: _reply,
-        hint: 'Everything the reply said.',
-        onSubmit: () {
-          if (_reply.text.trim().isEmpty) return;
-          hand?.receive(_reply.text);
-          _reply.clear();
-        },
-      ),
-      const SizedBox(height: MiSpace.sm),
-      MiAction(
-        label: 'Bring it back',
-        onPressed: () {
-          if (_reply.text.trim().isEmpty) return;
-          hand?.receive(_reply.text);
-          _reply.clear();
-        },
-      ),
-      const SizedBox(height: MiSpace.lg),
-      MiRule(),
       const SizedBox(height: MiSpace.lg),
     ];
+  }
+
+  void _bringBack(HandoverCouncil? hand) {
+    if (_reply.text.trim().isEmpty) return;
+    hand?.receive(_reply.text);
+    _reply.clear();
   }
 }

@@ -59,113 +59,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SingleChildScrollView(
       child: MiLeaf(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const MiEyebrow('Settings'),
-            const SizedBox(height: MiSpace.lg),
-            Text('Appearance', style: MiType.title.copyWith(color: c.ink)),
-            const SizedBox(height: MiSpace.sm),
+            const MiSectionHeader(title: 'Appearance'),
+            const SizedBox(height: MiSpace.md),
             Wrap(
               spacing: MiSpace.sm,
+              runSpacing: MiSpace.sm,
               children: <Widget>[
                 for (final ThemeMode m in ThemeMode.values)
-                  MiAction(
+                  MiButton(
                     label: switch (m) {
                       ThemeMode.system => 'Follow the system',
-                      ThemeMode.light => 'Daylight',
-                      ThemeMode.dark => 'Lamplight',
+                      ThemeMode.light => 'Light',
+                      ThemeMode.dark => 'Dark',
                     },
-                    secondary: s.themeMode != m,
+                    kind: s.themeMode == m
+                        ? MiButtonKind.primary
+                        : MiButtonKind.secondary,
                     onPressed: () =>
                         widget.library.updateSettings(s.copyWith(themeMode: m)),
                   ),
               ],
             ),
-            const SizedBox(height: MiSpace.xl),
-            MiRule(strong: true),
-            const SizedBox(height: MiSpace.lg),
-            Text('The council', style: MiType.title.copyWith(color: c.ink)),
-            const SizedBox(height: MiSpace.xs),
-            Text(
-              canDriveCouncil
+
+            const SizedBox(height: MiSpace.xxl),
+            MiSectionHeader(
+              title: 'The council',
+              subtitle: canDriveCouncil
                   ? 'This machine can drive a sitting on its own through the '
-                        'Claude CLI. Leave the path empty and it will ask the '
+                        'Claude CLI. Leave the path empty and it asks the '
                         'operating system where the CLI is.'
-                  : 'A phone has no CLI, so every turn here is carried by hand. '
-                        'A sitting on this device is never unattended.',
-              style: MiType.prose.copyWith(color: c.inkMuted),
+                  : 'A phone has no CLI, so every turn here is carried by '
+                        'hand. A sitting on this device is never unattended.',
             ),
             const SizedBox(height: MiSpace.md),
-            MiWriting(
-              controller: _path,
-              minLines: 1,
-              maxLines: 2,
-              hint: 'An explicit path to the claude binary.',
-            ),
-            const SizedBox(height: MiSpace.xs),
-            Text(
-              'A directive, not a hint: when this is set it is used alone, so '
-              'a wrong path is reported rather than silently bypassed by a '
-              'working install somewhere else.',
-              style: MiType.caption.copyWith(color: c.inkMuted),
-            ),
-            const SizedBox(height: MiSpace.md),
-            MiWriting(
-              controller: _model,
-              minLines: 1,
-              maxLines: 1,
-              hint: 'A model alias — opus, sonnet, haiku — or nothing.',
-            ),
-            const SizedBox(height: MiSpace.xs),
-            Text(
-              'Empty sends no model flag at all, leaving the CLI on whatever '
-              'you chose with /model. The flag lists no choices, so a bad one '
-              'cannot be caught before it fails a turn.',
-              style: MiType.caption.copyWith(color: c.inkMuted),
-            ),
-            const SizedBox(height: MiSpace.md),
-            Row(
-              children: <Widget>[
-                MiAction(
-                  label: 'Save',
-                  onPressed: () => widget.library.updateSettings(
-                    s.copyWith(
-                      claudePath: _path.text.trim(),
-                      model: _model.text.trim(),
+            MiPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  MiField(
+                    label: 'Path to the CLI',
+                    child: MiWriting(
+                      controller: _path,
+                      minLines: 1,
+                      maxLines: 2,
+                      hint: 'Empty asks the operating system.',
                     ),
                   ),
-                ),
-                const SizedBox(width: MiSpace.md),
-                MiAction(
-                  label: 'Test the connection',
-                  secondary: true,
-                  onPressed: _testCouncil,
-                ),
-              ],
-            ),
-            if (_probe != null) ...<Widget>[
-              const SizedBox(height: MiSpace.sm),
-              Text(
-                _probe!,
-                style: MiType.caption.copyWith(color: c.inkMuted),
+                  const SizedBox(height: MiSpace.xs),
+                  Text(
+                    'A directive, not a hint: when this is set it is used '
+                    'alone, so a wrong path is reported rather than silently '
+                    'bypassed by a working install somewhere else.',
+                    style: MiType.caption.copyWith(color: c.inkMuted),
+                  ),
+                  const SizedBox(height: MiSpace.lg),
+                  MiField(
+                    label: 'Model',
+                    child: MiWriting(
+                      controller: _model,
+                      minLines: 1,
+                      maxLines: 1,
+                      hint: 'opus, sonnet, haiku — or nothing.',
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.xs),
+                  Text(
+                    'Empty sends no model flag at all, leaving the CLI on '
+                    'whatever you chose with /model. The flag lists no '
+                    'choices, so a bad one cannot be caught before it fails a '
+                    'turn.',
+                    style: MiType.caption.copyWith(color: c.inkMuted),
+                  ),
+                  const SizedBox(height: MiSpace.lg),
+                  Wrap(
+                    spacing: MiSpace.sm,
+                    runSpacing: MiSpace.sm,
+                    children: <Widget>[
+                      MiButton(
+                        label: 'Save',
+                        kind: MiButtonKind.primary,
+                        onPressed: () => widget.library.updateSettings(
+                          s.copyWith(
+                            claudePath: _path.text.trim(),
+                            model: _model.text.trim(),
+                          ),
+                        ),
+                      ),
+                      MiButton(
+                        label: 'Test the connection',
+                        onPressed: _testCouncil,
+                      ),
+                    ],
+                  ),
+                  if (_probe != null) ...<Widget>[
+                    const SizedBox(height: MiSpace.md),
+                    Text(
+                      _probe!,
+                      style: MiType.caption.copyWith(color: c.inkMuted),
+                    ),
+                  ],
+                ],
               ),
-            ],
-            const SizedBox(height: MiSpace.xl),
-            MiRule(strong: true),
-            const SizedBox(height: MiSpace.lg),
-            Text('This build', style: MiType.title.copyWith(color: c.ink)),
-            const SizedBox(height: MiSpace.sm),
-            MiRecord(label: 'Version', value: BuildInfo.label),
-            MiRecord(
-              label: 'Platform',
-              value: '${BuildInfo.platform} · ${BuildInfo.osVersion}',
             ),
+
+            const SizedBox(height: MiSpace.xxl),
+            const MiSectionHeader(title: 'This build'),
             const SizedBox(height: MiSpace.md),
-            MiAction(
-              label: 'Copy diagnostics',
-              secondary: true,
-              onPressed: () => Clipboard.setData(
-                ClipboardData(text: Diagnostics.instance.report()),
+            MiPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  MiField(
+                    label: 'Version',
+                    child: Text(
+                      BuildInfo.label,
+                      style: MiType.numeric.copyWith(color: c.ink),
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.md),
+                  MiField(
+                    label: 'Platform',
+                    child: Text(
+                      '${BuildInfo.platform} · ${BuildInfo.osVersion}',
+                      style: MiType.body.copyWith(color: c.ink),
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.lg),
+                  MiButton(
+                    label: 'Copy diagnostics',
+                    onPressed: () => Clipboard.setData(
+                      ClipboardData(text: Diagnostics.instance.report()),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: MiSpace.xxl),

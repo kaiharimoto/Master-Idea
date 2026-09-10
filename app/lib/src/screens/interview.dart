@@ -100,7 +100,8 @@ class InterviewScreen extends StatelessWidget {
             ],
             const SizedBox(height: MiSpace.xl),
             if (session.rounds.isEmpty)
-              MiAction(label: 'Go to the sitting', onPressed: onBegun),
+              MiButton(label: 'Go to the sitting', onPressed: onBegun,
+            kind: MiButtonKind.primary,),
             const SizedBox(height: MiSpace.xxl),
           ],
         ),

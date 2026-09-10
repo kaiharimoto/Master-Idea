@@ -3,6 +3,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../widgets/counts.dart';
 
 /// Sessions stored on disk.
 ///
@@ -23,33 +24,35 @@ class LibraryScreen extends StatelessWidget {
       listenable: library,
       builder: (BuildContext context, _) {
         final List<Session> sessions = library.sessions;
+        if (sessions.isEmpty) {
+          return const MiEmpty(
+            title: 'Nothing has been put before the council yet',
+            detail:
+                'Every session is kept on this device as plain files — no '
+                'account, nothing hosted. A sitting that took six hours should '
+                'be recoverable with a text editor if this app ever fails to '
+                'start.',
+          );
+        }
+
         return SingleChildScrollView(
           child: MiLeaf(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                const MiEyebrow('Sessions'),
-                const SizedBox(height: MiSpace.sm),
-                Text(
-                  sessions.isEmpty
-                      ? 'Nothing has been put before the council yet.'
-                      : '${sessions.length} stored on this device.',
-                  style: MiType.prose.copyWith(color: c.inkMuted),
+                MiSectionHeader(
+                  title: 'Sessions',
+                  subtitle: '${sessions.length} stored on this device, '
+                      'reopenable with no council and no network.',
                 ),
                 const SizedBox(height: MiSpace.lg),
                 for (final Session s in sessions) ...<Widget>[
-                  InkWell(
-                    onTap: () {
-                      library.select(s.id);
-                      onOpened();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: MiSpace.md,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: c.rule)),
-                      ),
+                  MiPanel(
+                    child: InkWell(
+                      onTap: () {
+                        library.select(s.id);
+                        onOpened();
+                      },
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
@@ -57,15 +60,31 @@ class LibraryScreen extends StatelessWidget {
                             s.title,
                             style: MiType.heading.copyWith(color: c.ink),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${s.interview.verdict.template.name} · '
-                            '${s.directions.length} directions · '
-                            '${s.ratings.length} verdicts · '
-                            '${s.manifest.dryness == null ? 'unfinished' : 'ran dry'}',
-                            style: MiType.caption.copyWith(color: c.inkMuted),
+                          const SizedBox(height: MiSpace.sm),
+                          Wrap(
+                            spacing: MiSpace.sm,
+                            runSpacing: MiSpace.xs,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: <Widget>[
+                              MiTag(s.interview.verdict.template.name),
+                              MiTag(
+                                s.manifest.dryness == null
+                                    ? 'unfinished'
+                                    : 'ran dry',
+                                tone: s.manifest.dryness == null
+                                    ? c.inkMuted
+                                    : c.success,
+                              ),
+                              Text(
+                                '${countOf(s.directions.length, 'direction')} · '
+                                '${countOf(s.ratings.length, 'verdict')}',
+                                style: MiType.caption.copyWith(
+                                  color: c.inkMuted,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: MiSpace.sm),
                           Text(
                             s.id,
                             style: MiType.mono.copyWith(color: c.inkFaint),
@@ -74,20 +93,15 @@ class LibraryScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: MiSpace.sm),
                 ],
-                const SizedBox(height: MiSpace.xl),
-                if (sessions.isNotEmpty)
-                  MiRecord(
-                    label: 'Kept in',
-                    value: library.pathOf(sessions.first.id),
-                    style: MiType.mono,
+                const SizedBox(height: MiSpace.lg),
+                MiField(
+                  label: 'Kept in',
+                  child: Text(
+                    library.pathOf(sessions.first.id),
+                    style: MiType.mono.copyWith(color: c.inkMuted),
                   ),
-                const SizedBox(height: MiSpace.sm),
-                Text(
-                  'Plain files, on this device only. A sitting that took six '
-                  'hours of council time should be recoverable with a text '
-                  'editor if this app ever fails to start.',
-                  style: MiType.caption.copyWith(color: c.inkMuted),
                 ),
                 const SizedBox(height: MiSpace.xxl),
               ],

@@ -4,83 +4,115 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mi_design/mi_design.dart';
 
+/// Master Prompt's design system, when both halves happen to be checked out
+/// side by side. CI checks out one repository at a time, so the test that
+/// reads it skips rather than failing — a cross-repository assertion that goes
+/// red on every CI run is a test nobody keeps.
+File? mp(String name) {
+  final File f = File('../../../Master-Prompt/packages/mp_design/lib/src/$name');
+  return f.existsSync() ? f : null;
+}
+
 void main() {
-  group('the accent is reserved', () {
-    test('only MiVerdict paints with it', () {
-      // A rule about colour can only be kept by being a rule about code. The
-      // palette reserves oxblood for verdicts and ratings, and a second place
-      // that reaches for it makes the first one mean nothing — so this reads
-      // the source and names the classes that touch `accent`.
+  group('the two halves are one family', () {
+    test('the palette is Master Prompt\'s, value for value', () {
+      // Checked against the numbers rather than against a memory of them: the
+      // point of the pair looking alike is that they *are* alike, and a token
+      // nudged here would drift them apart one commit at a time.
+      expect(MiColors.light.canvas, const Color(0xFFFBFBFA));
+      expect(MiColors.light.ink, const Color(0xFF17181A));
+      expect(MiColors.light.line, const Color(0xFFE6E5E1));
+      expect(MiColors.dark.canvas, const Color(0xFF0E0F11));
+      expect(MiColors.dark.ink, const Color(0xFFECEDEE));
+    });
+
+    test('the type is the same Inter at the same scale', () {
+      expect(MiType.family, 'Inter');
+      expect(MiType.question.fontSize, 30);
+      expect(MiType.body.fontSize, 17);
+      expect(MiType.eyebrow.letterSpacing, 1.2);
+    });
+
+    test('the grid is the same 8-point grid', () {
+      expect(MiSpace.md, 16);
+      expect(MiSpace.readingWidth, 620);
+      expect(MiSpace.tapTarget, 56);
+    });
+  });
+
+  group('the one thing this half adds', () {
+    test('only MiVerdict paints with the reserved colour', () {
+      // A rule about colour can only be kept by being a rule about code. A
+      // second place that reached for oxblood would make the first one mean
+      // nothing, so this reads the source and names every class that touches
+      // it.
       final String source = File('lib/src/widgets.dart').readAsStringSync();
-      final List<String> chunks = source.split(RegExp(r'^class ', multiLine: true));
+      final List<String> chunks = source.split(
+        RegExp(r'^class ', multiLine: true),
+      );
       final List<String> reaching = <String>[
         for (final String chunk in chunks.skip(1))
-          if (chunk.contains('.accent'))
+          if (chunk.contains('c.verdict'))
             chunk.split(RegExp(r'[ ({]')).first,
       ];
       expect(reaching, <String>['MiVerdict'],
           reason:
-              'Judgement is meant to be the loudest thing on any screen. It '
-              'stops being so the moment anything else is oxblood.');
+              'A council\'s whole output is judgement. It stops being findable '
+              'the moment anything else is that colour.');
     });
 
-    test('the Material theme is never handed the accent', () {
-      final ThemeData light = buildMiTheme(MiColors.light, dark: false);
-      final ThemeData dark = buildMiTheme(MiColors.dark, dark: true);
-      for (final (ThemeData t, MiColors c) in <(ThemeData, MiColors)>[
-        (light, MiColors.light),
-        (dark, MiColors.dark),
-      ]) {
-        expect(t.colorScheme.primary, isNot(c.accent),
-            reason:
-                'A stock widget reaching for `primary` would paint something '
-                'verdict-coloured that is not a verdict.');
-        expect(t.colorScheme.error, isNot(c.accent),
-            reason:
-                'A failure is not a judgement, and must not be able to look '
-                'like one.');
+    test('Master Prompt has no such colour, and needs none', () {
+      final File? file = mp('tokens.dart');
+      if (file == null) {
+        markTestSkipped('Master Prompt is not checked out beside this one.');
+        return;
+      }
+      final String theirs = file.readAsStringSync();
+      expect(theirs.contains('verdict'), isFalse,
+          reason:
+              'The addition belongs to the half that produces verdicts. If it '
+              'ever appears there too, these two files have started being '
+              'edited as one and the family resemblance is now a coincidence.');
+    });
+
+    test('the Material theme is never handed it', () {
+      for (final MiColors c in <MiColors>[MiColors.light, MiColors.dark]) {
+        final ThemeData t = buildMiTheme(c, dark: c == MiColors.dark);
+        expect(t.colorScheme.primary, isNot(c.verdict));
+        expect(t.colorScheme.error, isNot(c.verdict),
+            reason: 'A failure is not a judgement and must not look like one.');
       }
     });
+
+    test('a verdict is set at reading size', () {
+      expect(MiType.verdict.fontSize, MiType.body.fontSize,
+          reason:
+              'The colour carries it. Set larger, it would be the closest '
+              'thing this design has to a chart.');
+    });
   });
 
-  group('the surfaces are flat', () {
-    test('nothing in the theme is elevated', () {
+  group('the surfaces', () {
+    test('are flat, and structure comes from hairlines', () {
       final ThemeData t = buildMiTheme(MiColors.light, dark: false);
       expect(t.cardTheme.elevation, 0);
-      expect(t.dialogTheme.elevation, 0);
-      expect(t.bottomSheetTheme.elevation, 0);
-      expect(t.splashFactory, NoSplash.splashFactory,
-          reason: 'Ink does not ripple.');
+      expect(t.dividerTheme.thickness, 1);
+      expect(t.splashFactory, NoSplash.splashFactory);
     });
 
-    test('a field is ruled underneath, not boxed', () {
-      final ThemeData t = buildMiTheme(MiColors.light, dark: false);
-      expect(t.inputDecorationTheme.border, isA<UnderlineInputBorder>(),
-          reason:
-              'A form of boxes is the fastest way for this to start reading '
-              'as a web app rather than a proceeding.');
-    });
-  });
-
-  group('the type', () {
-    test('is the vendored serif, not whatever the platform has', () {
+    test('are set in the vendored font, not whatever the platform has', () {
       final ThemeData t = buildMiTheme(MiColors.light, dark: false);
       expect(t.textTheme.bodyMedium!.fontFamily, contains('mi_design'),
           reason:
               'An unqualified family resolves to nothing and falls through to '
-              'the platform serif, so the same dossier would be set in Noto '
-              'on Android and Georgia on Windows.');
-    });
-
-    test('carries no numerals of its own into a verdict', () {
-      expect(MiType.verdict.fontSize, MiType.body.fontSize,
-          reason:
-              'The colour carries a verdict. Set larger, it would be the '
-              'closest thing this design has to a chart.');
+              'the platform sans, so the same screen would be set in Roboto on '
+              'Android and Segoe on Windows.');
     });
   });
 
-  testWidgets('a verdict names the seat that gave it', (WidgetTester tester) async {
+  testWidgets('a verdict names the seat that gave it', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildMiTheme(MiColors.light, dark: false),
@@ -107,7 +139,7 @@ void main() {
         theme: buildMiTheme(MiColors.light, dark: false),
         home: const Scaffold(
           body: MiDisclosure(
-            summary: 'The full ledger',
+            label: 'The full ledger',
             child: Text('territory nobody has entered'),
           ),
         ),
@@ -119,8 +151,33 @@ void main() {
             'with it announces its contents to a screen reader while looking '
             'closed.');
 
-    await tester.tap(find.text('THE FULL LEDGER'));
+    await tester.tap(find.text('The full ledger'));
     await tester.pumpAndSettle();
     expect(find.text('territory nobody has entered'), findsOneWidget);
+  });
+
+  testWidgets('a panel with an accent bar lays out inside a scroll view', (
+    WidgetTester tester,
+  ) async {
+    // `CrossAxisAlignment.stretch` in a Row demands a bounded height, which it
+    // never has inside a scroll view — the accent bar is the third layout
+    // crash this shape caused in the other half.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMiTheme(MiColors.light, dark: false),
+        home: Scaffold(
+          body: ListView(
+            children: <Widget>[
+              MiPanel(
+                accent: MiColors.light.ink,
+                child: const Text('something needing attention'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('something needing attention'), findsOneWidget);
   });
 }
