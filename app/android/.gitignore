@@ -1,0 +1,16 @@
+gradle-wrapper.jar
+/.gradle
+/captures/
+/gradlew
+/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# dev-keystore.jks is deliberately NOT ignored.
+#
+# It is committed so every build is signed identically and installs over the
+# last one instead of forcing an uninstall that would delete the user's stored
+# sessions. It is public, worthless as a secret, and must never sign a Play
+# Store release. A real release key would be a CI secret and would never be in
+# a repository at all.

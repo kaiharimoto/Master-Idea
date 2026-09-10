@@ -25,6 +25,9 @@ packages/mi_core/     Council, session record, invariants, renderers.
                       Pure Dart. No Flutter, no dart:io.
 packages/mi_engine/   Session store on disk, Claude CLI transport, headless
                       entry point. dart:io only. No Flutter.
+packages/mi_design/   The court archive treatment: tokens, theme, primitives.
+                      Flutter.
+app/                  The Flutter app for Android and Windows.
 ```
 
 **There is no pub workspace, deliberately** — the same decision Master Prompt
@@ -36,6 +39,9 @@ destroys the property they exist to have.
 
 ```bash
 cd packages/mi_core   && dart pub get && dart analyze && dart test   # no Flutter
+cd packages/mi_engine && dart pub get && dart analyze && dart test   # no Flutter
+cd packages/mi_design && flutter pub get && flutter analyze && flutter test
+cd app                && flutter pub get && flutter analyze && flutter test
 ```
 
 `dart format` is a CI gate. Run it before pushing.
@@ -126,6 +132,56 @@ rather than storing an empty string that reads as fine.
 the stored session, which is what lets a session be reopened next month with no
 API key. `render_test.dart` proves it the only way it can be proven: by having
 a transport available that throws if anything touches it.
+
+## The clients
+
+**One application, two platforms, and the transport is the only real
+difference.** Every region is one widget tree. The dossier, the ledger and the
+pitch all arrive as an `MiDocument` from the core and are laid out by one
+`DocumentView`, so neither platform decides for itself what a verdict looks
+like — parity is a property of there being one of them.
+
+**The Android client cannot run a sitting unattended, and never says it can.**
+There is no CLI on a phone, so `HandoverCouncil` carries each turn out by hand
+and takes the reply back. It implements the same `CouncilTransport` the CLI
+does and the same `CouncilRun` drives it, so a hand-carried sitting produces
+identical records — but six hours of it is six hours of a person copying, and
+claiming the desktop's autonomy for that would be the one platform difference
+that matters being papered over.
+
+**Oxblood is reachable through exactly one widget.** `MiVerdict` is the only
+thing in `mi_design` that touches `accent`, and `treatment_test.dart` reads the
+source to prove it. The Material theme is handed ink as its `primary` for the
+same reason: a stock widget reaching for `primary` would otherwise paint
+something verdict-coloured that is not a verdict.
+
+**The font is committed and the theme names it package-qualified.**
+`packages/mi_design/SourceSerif`, not `SourceSerif` — the unqualified name
+resolves to nothing and falls through to the platform serif *silently*, which
+sets the same dossier in Noto on Android and Georgia on Windows with no error
+anywhere.
+
+**CompanyName and ProductName in `Runner.rc` are load-bearing.**
+`path_provider_windows` builds `getApplicationSupportDirectory()` as
+`RoamingAppData\<CompanyName>\<ProductName>`, read out of the running exe's
+VERSIONINFO at runtime. Editing either string silently relocates every stored
+session and the app starts up empty with nothing saying why.
+
+**`app/android/dev-keystore.jks` is committed on purpose.** Every build is
+signed identically so a new one installs over the last instead of forcing an
+uninstall that would take the user's sessions with it. It is public, worthless
+as a secret, and must never sign a Play Store release; CI asserts the
+certificate fingerprint after every APK.
+
+**Widget tests must not touch the filesystem.** Use `Library(inMemory: true)`.
+Real writes cannot complete in the tester's fake-async zone, so a test that
+persists either hangs or races depending on machine load. Use a plain `test()`
+for anything about storage.
+
+**Widget tests default to 800×600**, which is below the 900px wide gate — so
+every test here exercises the narrow layout unless it sets
+`tester.view.physicalSize`. The wide branch of `home.dart` is uncovered
+otherwise, and that is the branch a desktop actually runs.
 
 ## Conventions
 

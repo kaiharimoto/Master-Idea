@@ -3,8 +3,9 @@
 Where the build actually is. Kept current as part of every change, because it
 is the only thing that tells the next session where we were.
 
-**Last updated:** the session that built the engine and the headless spine, and
-joined the two halves of the pair.
+**Last updated:** the session that built both clients and the release
+pipeline — a signed APK and a Windows installer, published to a rolling `dev`
+release that the app updates itself from.
 
 ## Done
 
@@ -58,11 +59,33 @@ in that program's `mp_core`, its fixtures are pitches this one actually
 produced, and decision 0011 records why the seam is a paste rather than a file
 or a protocol.
 
-## Not started
+## The clients, and builds you can install
 
-- **Both clients.** No Flutter work has begun. Neither is stubbed either —
-  the rule that neither is a port of the other applies from the moment the
-  first one starts.
+Both clients exist and are built by CI on every push, published to the rolling
+`dev` release: a signed APK and a per-user Windows installer, with the portable
+zip alongside it.
+
+- **`packages/mi_design`** — the court archive treatment. Parchment ground, ink
+  text, one oxblood accent reachable through exactly one widget, rule lines
+  instead of boxes, and Source Serif 4 committed so the same document is set
+  the same way on both platforms.
+- **`app/`** — one Flutter application, two platform folders. Seven regions:
+  interview, sitting, coverage ledger, dossier, assembly, pitch, sessions —
+  plus settings and the update sheet. The dossier, the ledger and the pitch all
+  render one `MiDocument` through one `DocumentView`.
+- **Updating** — the app reads the rolling `dev` tag at launch, compares build
+  numbers numerically, prefers the installer over the zip on Windows, and hands
+  the downloaded file to the system: the package installer on Android, a silent
+  install-and-relaunch on Windows.
+- **The transports** — the CLI on a desktop, and `HandoverCouncil` on a phone,
+  where every turn is carried by hand. Both are the same `CouncilTransport`, so
+  both produce identical records.
+
+The APK was built and its signature verified against the committed key before
+any of this was pushed. The Windows installer can only be built on a Windows
+host, which is what the CI job on `windows-latest` is for.
+
+## Not started
 - **The interview itself.** The gate, the module bank and the composer exist and
   are tested; what does not exist is the thing that *conducts* an interview —
   putting a composed module to a person, reading what comes back, and producing
@@ -74,16 +97,16 @@ or a protocol.
 
 ## Next action
 
-Start both clients at once, from the thin end-to-end spine the brief asks for:
-one smallest-tier session across all seven regions on Android and Windows
-together, unstyled, before any treatment is applied. `mi_design` first — the
-court-archive tokens, with the accent reachable only by a verdict block — then
-the seven regions against `MiDocument`, which both clients render rather than
-each deciding for itself what a verdict looks like.
+Run the three reference sessions for real, and capture the evidence set from
+them. Everything they need now exists: the clients build, a sitting can be
+driven from either transport, and the dossier, ledger and pitch render from the
+stored files.
 
-Neither client may be stubbed while the other is built. That is a failure
-condition in the brief, and it is also the only way parity survives contact
-with a deadline.
+Before that, two things worth doing while the toolchain is fresh: exercise the
+wide layout in a widget test (`tester.view.physicalSize`, since the default
+800×600 is below the 900px gate and leaves the desktop branch uncovered), and
+put a real sitting through the Android handover route end to end rather than
+through a scripted double.
 
 ## Known gaps to watch
 

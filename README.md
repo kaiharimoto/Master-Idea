@@ -14,6 +14,29 @@ built from the directions you chose.
 
 It works for any creative project — an essay, a story, a song, a program.
 
+## Install it
+
+Builds are published to the rolling
+[`dev` release](https://github.com/kaiharimoto/Master-Idea/releases/tag/dev) on
+every green push. The link never changes.
+
+**Android** — download the `.apk` and open it. Android will ask once whether to
+allow installs from your browser. Later builds install straight over this one
+and keep every stored session, because every build is signed with the same key.
+
+**Windows** — download `MasterIdeaSetup-*.exe` and run it. It installs for you
+only, so there is no administrator prompt. SmartScreen will warn that the
+publisher is unknown because the installer is unsigned: *More info*, then *Run
+anyway*.
+
+After the first install you should not need that page again — the app checks it
+at launch and updates itself in one click.
+
+**A phone cannot run a sitting unattended.** There is no Claude CLI there, so
+every turn is carried by hand: the app gives you what to send and takes back
+what comes of it. The records are identical either way; the difference is
+whether you have to be there.
+
 ## What exists today
 
 The engine, headless and provable:
@@ -30,16 +53,25 @@ The engine, headless and provable:
 - Pure renderers over a stored session: the dossier, the coverage ledger, and
   the pitch prompt, all of which work with the council unreachable.
 
-Not yet built: the two clients (Android and Windows desktop), the on-disk
-session store, and the Claude CLI transport. `docs/STATUS.md` is the honest
-account of where the build is.
+And both clients: one Flutter application for Android and Windows, with seven
+regions — interview, sitting, coverage ledger, dossier, assembly, pitch and the
+session library — set in the court archive treatment, updating themselves from
+the rolling release.
+
+Not yet done: the three reference sessions and the evidence set they are
+captured from. `docs/STATUS.md` is the honest account of where the build is.
 
 ## Building and testing
 
-Only the Dart SDK is needed for everything that exists today. No Flutter.
+The two pure packages need only the Dart SDK — no Flutter — which is what keeps
+the logic that has to be right during an unattended sitting testable in
+seconds.
 
 ```bash
-cd packages/mi_core && dart pub get && dart analyze && dart test
+cd packages/mi_core   && dart pub get && dart analyze && dart test   # no Flutter
+cd packages/mi_engine && dart pub get && dart analyze && dart test   # no Flutter
+cd packages/mi_design && flutter pub get && flutter analyze && flutter test
+cd app                && flutter pub get && flutter analyze && flutter test
 ```
 
 `dart format` is a CI gate. Run it before pushing.
@@ -61,6 +93,8 @@ packages/mi_core/     The council, the session record, the invariants, the
                       renderers. Pure Dart: no Flutter, no dart:io.
 packages/mi_engine/   The on-disk session store, Claude CLI discovery and
                       invocation, and the headless entry point. dart:io only.
+packages/mi_design/   The court archive treatment. Flutter.
+app/                  The Flutter app for Android and Windows.
 docs/decisions/       The contemporaneous decision log, and parity.md, which
                       records every place this build matches Master Prompt's
                       architecture and every place it deviates.

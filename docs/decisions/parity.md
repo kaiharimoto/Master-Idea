@@ -26,13 +26,37 @@ proceeds; a deviation added later is added here at the moment it is made.
 | Package names differ (`mi_` rather than `mp_`) | Two packages called `mp_core` on one machine are ambiguous in every import. |
 | `mi_engine` drives many concurrent seats where `mp_runner` supervises one long conversation | A difference in what the package does, not in where the architectural line is drawn. |
 
-## Not yet claimed
+## Added when the clients were built
 
-Nothing about the Android and Windows clients is recorded here yet, because
-neither has been started. The transport difference and the Android autonomy
-limit — the Android client cannot run unattended, and the desktop transport's
-autonomy may not be claimed for it — are recorded here the moment the first
-client work begins, not retroactively.
+| Matched | Where |
+|---|---|
+| One Flutter application, two platform folders, both first-class | `app/` — parity is a property of there being one widget tree, not a promise |
+| A committed development signing key, so a build installs over the last one | `app/android/dev-keystore.jks`, asserted by fingerprint in CI after every APK |
+| One native channel and no more, kept thin because a Linux runner cannot test it | `masteridea/platform`: install an APK, share a file, save a file |
+| A `FileProvider` scoped to `cache/` only | `file_paths.xml` — a provider over internal storage would expose every stored session |
+| Per-user Inno Setup installer, no UAC, stable `AppId`, silent update with relaunch | `app/windows/installer/master_idea.iss` |
+| The build number stamped into the exe's VERSIONINFO by CI | Windows sees every build as 0.1.0.1 otherwise, and cannot tell an upgrade from a reinstall |
+| CompanyName and ProductName fixed forever | On Windows they decide where saved sessions live, at runtime |
+| An updater that reads a rolling `dev` tag, compares build numbers numerically, and prefers the installer over the zip | `app/lib/src/update/` |
+| `AppLifecycleListener` guarding a close mid-sitting | `_HomeScreenState` — the Windows embedder consumes the first WM_CLOSE precisely so the framework can answer |
+| No `ListTile` inside a ruled page; a disclosure built with `AnimatedSize` and a conditional child | `mi_design` — both are Master Prompt's scars |
+
+| Deviation | Reason |
+|---|---|
+| The rolling release publishes from the development branch as well as the default branch | This repository has only the one branch, and a build nobody can download is not a build. See decision 0013. |
+| A serif throughout, including controls, where Master Prompt is a grotesque throughout | Different treatments for different tools: this one is a proceeding whose output is a document, and a grotesque interface wrapped around a serif document reads as a web app that renders a PDF. |
+| The phone transport is a hand-carried council rather than a copy-paste interview | The same difference in the other direction: Master Prompt's phone route carries *questions* to a chat, and this one carries *seats*. Both are the same `CouncilTransport` the desktop uses, so neither client is a port of the other. |
+
+## The Android autonomy limit
+
+Recorded here because the brief requires it named rather than discovered: **the
+Android client cannot run a sitting unattended, and the desktop transport's
+autonomy is never claimed for it.** There is no Claude CLI on a phone, so every
+turn goes out by hand and comes back by hand. The sitting screen says so, and
+the release notes say so.
+
+Everything else is reachable on both clients: interview, sitting, coverage
+ledger, dossier, assembly, pitch and the session library.
 
 ## Added when the engine was built
 

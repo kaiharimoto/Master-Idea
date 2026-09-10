@@ -1,0 +1,28 @@
+name: master_idea
+description: >-
+  Master Idea — a council that takes one raw idea, interviews you once, and
+  deliberates unattended until it has nothing left to say.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mi_core:
+    path: ../packages/mi_core
+  mi_design:
+    path: ../packages/mi_design
+  mi_engine:
+    path: ../packages/mi_engine
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
