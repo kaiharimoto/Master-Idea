@@ -521,14 +521,28 @@ class _InterviewProceedingState extends State<InterviewProceeding> {
         children: <Widget>[
           Expanded(
             child: Text(
-              widget.sitting.phase == SittingPhase.deliberating
-                  ? 'The clerk is drafting this from what you said…'
-                  : d.draftedBy.isEmpty
-                  ? 'Composed from your answers. The clerk can draft it '
-                        'properly.'
-                  : 'Drafted by ${d.draftedBy} from your answers, and yours to '
-                        'correct.',
-              style: MiType.caption.copyWith(color: c.inkFaint),
+              switch (widget.sitting.phase) {
+                SittingPhase.deliberating =>
+                  'The clerk is drafting this from what you said…',
+                // Said rather than swallowed: on a machine with no CLI the
+                // clerk is asked automatically and fails automatically, and
+                // the client is entitled to know that the paragraph in front
+                // of them is the app's own and not the council's.
+                SittingPhase.failed =>
+                  'The clerk could not be reached, so this is composed from '
+                      'your answers. ${widget.sitting.problem ?? ''}',
+                _ when d.draftedBy.isEmpty =>
+                  'Composed from your answers. The clerk can draft it '
+                      'properly.',
+                _ =>
+                  'Drafted by ${d.draftedBy} from your answers, and yours to '
+                      'correct.',
+              },
+              style: MiType.caption.copyWith(
+                color: widget.sitting.phase == SittingPhase.failed
+                    ? c.warning
+                    : c.inkFaint,
+              ),
             ),
           ),
           if (!widget.sitting.isBusy)
