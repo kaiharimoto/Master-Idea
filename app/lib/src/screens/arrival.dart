@@ -51,6 +51,17 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
   InterviewDraft? _draft;
 
   @override
+  void initState() {
+    super.initState();
+    // An interview that was interrupted is picked up where it stopped. It is
+    // the one stage where all of the client's work happens, and it used to
+    // live entirely in a widget's state: a phone reclaiming the app in the
+    // background lost fifteen answers with nothing to resume.
+    final Map<String, Object?>? kept = widget.library.draft;
+    if (kept != null) _draft = InterviewDraft.fromJson(kept);
+  }
+
+  @override
   void dispose() {
     _idea.dispose();
     _draft?.dispose();
@@ -59,11 +70,15 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
 
   void _begin() {
     final String said = _idea.text.trim();
-    if (said.isEmpty) return;
+    if (said.isEmpty) {
+      miNotice(context, 'Say the idea first, however unfinished.');
+      return;
+    }
     setState(() {
       _draft = InterviewDraft(rawIdea: said);
       _idea.clear();
     });
+    widget.library.saveDraft(_draft!.toJson());
   }
 
   @override
@@ -97,6 +112,7 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
           child: InterviewProceeding(
             draft: draft,
             library: widget.library,
+            sitting: widget.sitting,
             onAbandoned: () => setState(() {
               _draft?.dispose();
               _draft = null;

@@ -31,6 +31,10 @@ enum CouncilLicence {
   /// May compute what a selected set of directions becomes together.
   integrate,
 
+  /// Put the client's own answers back to them as one brief they can correct,
+  /// and judge how large a sitting the idea warrants.
+  restate,
+
   /// May write traceability links and mark revisit points.
   archive,
 }
@@ -84,11 +88,22 @@ class CouncilRole {
   };
 }
 
-/// The council. At least eight seats is the floor in the brief; ten are here
+/// The council. At least eight seats is the floor in the brief; eleven are here
 /// because two of them — the anchorer and the escalator — exist only to make
 /// every cluster span conservative through reckless, which no single proposing
-/// seat reliably does on its own.
+/// seat reliably does on its own, and one — the clerk — sits before the
+/// sitting rather than during it.
 const List<CouncilRole> councilRoles = <CouncilRole>[
+  CouncilRole(
+    id: 'clerk',
+    name: 'Clerk',
+    lens: 'What the client actually said, put back as one brief.',
+    catches:
+        'A restatement that adds an idea the client never voiced, or a tier '
+        'chosen from how long they said they had rather than from what the '
+        'idea is.',
+    licences: <CouncilLicence>{CouncilLicence.restate},
+  ),
   CouncilRole(
     id: 'convenor',
     name: 'Convenor',

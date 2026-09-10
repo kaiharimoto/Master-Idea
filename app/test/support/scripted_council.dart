@@ -36,8 +36,12 @@ class ScriptedCouncil implements CouncilTransport {
         if (turn.agent.round >= silentFromRound) {
           return const CouncilReply(text: 'mi-none');
         }
-        final String answer = _firstAnswerIn(turn.prompt);
         final String angle = turn.conversation.split('-').skip(2).join('-');
+        // A different answer per angle. Two directions may share one only if
+        // each also names a gap of its own, so a double that cited the same
+        // answer everywhere would fail traceability for reasons that have
+        // nothing to do with what is being tested.
+        final String answer = _answerFor(angle, turn.prompt);
         return CouncilReply(
           text:
               'mi-direction\n'
@@ -82,12 +86,13 @@ class ScriptedCouncil implements CouncilTransport {
     }
   }
 
-  static String _firstAnswerIn(String prompt) {
-    final RegExpMatch? m = RegExp(
+  static String _answerFor(String angle, String prompt) {
+    final List<String> ids = RegExp(
       r'^\[([a-z-]+)\]',
       multiLine: true,
-    ).firstMatch(prompt);
-    return m?.group(1) ?? 'raw-idea';
+    ).allMatches(prompt).map((RegExpMatch m) => m.group(1)!).toList();
+    if (ids.isEmpty) return 'raw-idea';
+    return ids[angle.hashCode.abs() % ids.length];
   }
 
   static List<String> _rungsIn(String prompt) {

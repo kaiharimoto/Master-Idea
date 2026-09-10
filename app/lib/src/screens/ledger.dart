@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
+import '../widgets/document_actions.dart';
 import '../widgets/document_view.dart';
 
 /// The coverage ledger: the map of the idea space, as the cartographer drew it.
@@ -25,11 +26,31 @@ class LedgerScreen extends StatelessWidget {
             'was deliberately left, and what is still open.',
       );
     }
+    final MiDocument document = LedgerRenderer.render(session);
+
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: MiSpace.conversationWidth),
-        child: DocumentView(LedgerRenderer.render(session)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                MiSpace.lg,
+                MiSpace.md,
+                MiSpace.lg,
+                0,
+              ),
+              child: DocumentActions(
+                filename: '${session.taskId}-ledger.txt',
+                text: document.toText(),
+              ),
+            ),
+            const MiRule(),
+            Expanded(child: DocumentView(document)),
+          ],
+        ),
       ),
     );
   }

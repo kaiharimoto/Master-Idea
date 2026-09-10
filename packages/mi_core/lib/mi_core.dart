@@ -13,6 +13,7 @@ export 'src/council/dimensions.dart';
 export 'src/council/profiles.dart';
 export 'src/council/roles.dart';
 export 'src/council/templates.dart';
+export 'src/interview/interview_counsel.dart';
 export 'src/interview/interview_gate.dart';
 export 'src/interview/modules.dart';
 export 'src/invariants/invariant_suite.dart';

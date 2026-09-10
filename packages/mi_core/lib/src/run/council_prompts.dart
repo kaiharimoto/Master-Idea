@@ -1,6 +1,7 @@
 import '../council/angles.dart';
 import '../council/dimensions.dart';
 import '../council/profiles.dart';
+import '../council/templates.dart';
 import '../interview/interview_gate.dart';
 import '../session/direction.dart';
 import '../session/ledger.dart';
@@ -230,6 +231,68 @@ mi-none
       ..writeln('description=<one sentence on what lies there>')
       ..writeln('status=explored|dropped|gap')
       ..writeln('reason=<required when dropped: why it is not worth entering>')
+      ..writeln('end');
+    return b.toString();
+  }
+
+  /// The clerk's one turn, before the sitting opens.
+  ///
+  /// Two things at once, because they are one judgement: what the client
+  /// actually said, put back as a brief they can correct, and how large a
+  /// sitting the idea warrants. The tier is judged from the *idea* rather than
+  /// from the client's appetite — asked outright, everybody picks the longest
+  /// sitting, and a six-hour run on a postcard produces a hundred directions
+  /// about a postcard.
+  static String restate({
+    required List<InterviewAnswer> answers,
+    required DomainProfile profile,
+    required List<HarnessTemplate> templates,
+  }) {
+    final StringBuffer b = StringBuffer()
+      ..writeln('You are the clerk of a council. You do not propose, judge or')
+      ..writeln('argue. You do two things and stop.')
+      ..writeln()
+      ..writeln('MEDIUM: ${profile.name}')
+      ..writeln('A good direction here: ${profile.goodDirection}')
+      ..writeln()
+      ..writeln('WHAT THE CLIENT SAID, VERBATIM');
+    for (final InterviewAnswer a in answers) {
+      b
+        ..writeln('[${a.moduleId}] ${a.question}')
+        ..writeln('  ${a.text}');
+    }
+    b
+      ..writeln()
+      ..writeln('FIRST. Put their idea back to them as one paragraph they can')
+      ..writeln('correct. It becomes the constitution of a deliberation they')
+      ..writeln('will not attend, so:')
+      ..writeln('- every claim in it must come from something above;')
+      ..writeln('- add nothing they did not say, however obvious it seems —')
+      ..writeln('  an invention here is an invention the whole sitting is')
+      ..writeln('  bound by, and they will never be asked about it;')
+      ..writeln('- write it in their register, not in yours.')
+      ..writeln()
+      ..writeln('SECOND. Say how large a sitting this idea warrants. Judge it')
+      ..writeln('from how open the idea still is — how many genuinely')
+      ..writeln('different shapes it could take — and not from how much time')
+      ..writeln('the client said they had. A settled idea with a long horizon')
+      ..writeln('is a short sitting; an open one with an afternoon behind it')
+      ..writeln('is still open.')
+      ..writeln();
+    for (final HarnessTemplate t in templates) {
+      b.writeln('[${t.id}] ${t.name} — ${t.expectation}');
+    }
+    b
+      ..writeln()
+      ..writeln('Reply with exactly these two blocks and nothing else:')
+      ..writeln()
+      ..writeln('mi-brief')
+      ..writeln('restatement=<the paragraph>')
+      ..writeln('end')
+      ..writeln()
+      ..writeln('mi-scale')
+      ..writeln('template=<one id from the list above>')
+      ..writeln('reasoning=<why this one and not the one above or below it>')
       ..writeln('end');
     return b.toString();
   }

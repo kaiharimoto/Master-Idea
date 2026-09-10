@@ -223,6 +223,53 @@ class Sitting extends ChangeNotifier {
     }
   }
 
+  /// Ask the clerk for a draft brief and a scale verdict.
+  ///
+  /// The one council turn that happens before a session exists, so it opens a
+  /// transport of its own against a scratch name. On a phone it is carried by
+  /// hand like every other turn — one turn, before the client has agreed to
+  /// carry hundreds.
+  Future<InterviewAdvice?> counsel({
+    required List<InterviewAnswer> answers,
+    required String profileId,
+    required Settings settings,
+  }) async {
+    if (isBusy) return null;
+    _problem = null;
+    _route = canDrive ? SittingRoute.cli : SittingRoute.handover;
+    _phase = SittingPhase.deliberating;
+    notifyListeners();
+
+    final CouncilTransport? transport = await _transportFor(
+      'interview',
+      settings,
+    );
+    if (transport == null) return null;
+
+    try {
+      return await InterviewCounsel.seek(
+        transport: transport,
+        answers: answers,
+        profileId: profileId,
+      );
+    } on CouncilStopped {
+      return null;
+    } on CouncilUnavailable catch (e) {
+      _fail(e.detail);
+      return null;
+    } on Object catch (e) {
+      _fail('The clerk could not be reached. $e');
+      return null;
+    } finally {
+      if (_phase != SittingPhase.failed) _phase = SittingPhase.idle;
+      _hand?.removeListener(_handMoved);
+      _hand?.dispose();
+      _hand = null;
+      _closeTransport();
+      notifyListeners();
+    }
+  }
+
   Future<CouncilTransport?> _transportFor(
     String sessionId,
     Settings settings,

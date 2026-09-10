@@ -99,6 +99,17 @@ class Library extends ChangeNotifier {
       }
     }
 
+    final File d = _draftFile(_root!);
+    if (d.existsSync()) {
+      try {
+        final Object? j = jsonDecode(d.readAsStringSync());
+        if (j is Map<String, Object?>) _draft = j;
+      } on FormatException {
+        // An unreadable draft is not worth refusing to start over.
+        _draft = null;
+      }
+    }
+
     _loaded = true;
     Diagnostics.instance.log('Loaded ${_order.length} session(s).');
     notifyListeners();
@@ -137,6 +148,7 @@ class Library extends ChangeNotifier {
     _sessions[id] = session;
     _order.insert(0, id);
     _openId = id;
+    await clearDraft();
     Diagnostics.instance.log(
       'Opened session $id at the ${interview.verdict.template.name} tier.',
     );
@@ -190,6 +202,37 @@ class Library extends ChangeNotifier {
   /// Where the library itself is. Not the newest session's own directory,
   /// which is what "Kept in" used to show.
   String get root => _root?.path ?? '';
+
+  /// The interview in progress, if one is.
+  ///
+  /// An interview is fifteen questions of the client's own words and the one
+  /// stage where all of their work happens. It lived in a widget's state: a
+  /// phone reclaiming the app in the background lost every answer, with
+  /// nothing on disk and nothing to resume. It is a **draft** and not a
+  /// record — nothing here has been through the gate — so it lives beside the
+  /// settings rather than among the sessions, and it is deleted the moment
+  /// the gate closes over it.
+  Map<String, Object?>? _draft;
+
+  Map<String, Object?>? get draft => _draft;
+
+  Future<void> saveDraft(Map<String, Object?> d) async {
+    _draft = d;
+    if (inMemory) return;
+    final Directory dir = await _dir();
+    _draftFile(dir).writeAsStringSync(jsonEncode(d), flush: true);
+  }
+
+  Future<void> clearDraft() async {
+    _draft = null;
+    notifyListeners();
+    if (inMemory) return;
+    final File f = _draftFile(await _dir());
+    if (f.existsSync()) f.deleteSync();
+  }
+
+  File _draftFile(Directory dir) =>
+      File('${dir.path}${Platform.pathSeparator}draft.json');
 
   Future<void> updateSettings(Settings s) async {
     _settings = s;

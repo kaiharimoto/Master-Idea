@@ -90,9 +90,19 @@ class DeclaredUnknown {
 /// postcard produces a hundred directions about a postcard.
 @immutable
 class ScaleVerdict {
-  const ScaleVerdict({required this.templateId, required this.reasoning});
+  const ScaleVerdict({
+    required this.templateId,
+    required this.reasoning,
+    this.by = 'composed',
+  });
 
   final String templateId;
+
+  /// Who judged it: a seat id when the council did, `composed` when the app
+  /// worked it out from the answers, `client` when the client overruled both.
+  /// Recorded because a tier the client disagrees with is worth arguing about
+  /// before the run, and an argument needs to know who said it.
+  final String by;
 
   /// Why this tier and not the one above or below. Written into the dossier,
   /// because a tier the client disagrees with is worth arguing about before
@@ -104,11 +114,13 @@ class ScaleVerdict {
   Map<String, Object?> toJson() => <String, Object?>{
     'templateId': templateId,
     'reasoning': reasoning,
+    'by': by,
   };
 
   static ScaleVerdict fromJson(Map<String, Object?> j) => ScaleVerdict(
     templateId: '${j['templateId']}',
     reasoning: '${j['reasoning']}',
+    by: '${j['by'] ?? 'composed'}',
   );
 }
 

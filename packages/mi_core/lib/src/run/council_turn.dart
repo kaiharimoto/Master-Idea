@@ -182,6 +182,8 @@ class ParsedReply {
 /// than being guessed at.
 abstract final class CouncilReplyParser {
   static const List<String> knownKinds = <String>[
+    'mi-brief',
+    'mi-scale',
     'mi-direction',
     'mi-rating',
     'mi-dissent',

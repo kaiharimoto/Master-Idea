@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../widgets/document_actions.dart';
 
 /// The export: a launch document built from what the client selected.
 ///
@@ -43,26 +43,16 @@ class PitchScreen extends StatelessWidget {
           children: <Widget>[
             const MiEyebrow('Pitch prompt'),
             const SizedBox(height: MiSpace.sm),
-            Row(
-              children: <Widget>[
-                MiButton(
-                  label: 'Copy the whole thing',
-                  onPressed: () =>
-                      Clipboard.setData(ClipboardData(text: pitch)),
-                  kind: MiButtonKind.primary,
-                ),
-                const SizedBox(width: MiSpace.md),
-                Expanded(
-                  child: Text(
-                    tells.isEmpty
-                        ? 'Portable: nothing in it ties it to one provider.'
-                        : 'Not portable — found ${tells.join(', ')}.',
-                    style: MiType.caption.copyWith(
-                      color: tells.isEmpty ? c.inkMuted : c.warning,
-                    ),
-                  ),
-                ),
-              ],
+            // A row rather than a Row: at a large text scale the button and
+            // the note beside it overflowed the line they shared.
+            DocumentActions(filename: '${s.taskId}-pitch.md', text: pitch),
+            Text(
+              tells.isEmpty
+                  ? 'Portable: nothing in it ties it to one provider.'
+                  : 'Not portable — found ${tells.join(', ')}.',
+              style: MiType.caption.copyWith(
+                color: tells.isEmpty ? c.inkMuted : c.warning,
+              ),
             ),
             const SizedBox(height: MiSpace.lg),
             MiRule(strong: true),

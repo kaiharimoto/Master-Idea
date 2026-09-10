@@ -1,11 +1,8 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:master_idea/src/app.dart';
 import 'package:master_idea/src/store/library.dart';
-import 'package:mi_core/mi_core.dart';
 
 import 'library_test.dart' show interview;
 import 'offline_updater.dart';
