@@ -198,6 +198,16 @@ abstract final class LedgerRenderer {
         ),
       );
     }
+    for (final Hold h in m.holds) {
+      b.add(
+        DocBlock(
+          BlockKind.item,
+          'Held ${_spell(h.length)} by the client. Nothing new was sent while '
+          'it stood, and the round it interrupted was completed after. '
+          'Excluded from council time.',
+        ),
+      );
+    }
 
     // What each round actually yielded, which is the difference between a
     // round that searched and a round that repeated itself.
@@ -217,6 +227,10 @@ abstract final class LedgerRenderer {
         0,
         (int n, AngleReturn a) => n + a.unread.length,
       );
+      // Costed per round from the manifest's timestamps, because "round three
+      // cost eleven hundred calls" is the figure a client burning through a
+      // limit actually wants, and the manifest is flat.
+      final int calls = m.callsBetween(r.startedAt, r.endedAt);
       b.add(
         DocBlock(
           BlockKind.item,
@@ -224,7 +238,8 @@ abstract final class LedgerRenderer {
           '${r.newDirectionIds.length} kept, ${r.rejections.length} already '
           'held'
           '${exhausted == 0 ? '' : ', $exhausted angle(s) exhausted'}'
-          '${unread == 0 ? '' : ', $unread line(s) unreadable'}.',
+          '${unread == 0 ? '' : ', $unread line(s) unreadable'}'
+          '${calls == 0 ? '' : ', $calls model calls'}.',
         ),
       );
     }

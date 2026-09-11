@@ -421,6 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     // is a sheet they may have closed over it.
                     _sitting.needsHand
                         ? 'carry a turn'
+                        : _sitting.isHeld
+                        ? 'paused'
                         : _sitting.isBusy
                         ? 'in session'
                         : '',

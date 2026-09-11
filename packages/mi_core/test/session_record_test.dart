@@ -8,10 +8,20 @@ import 'support/fixtures.dart';
 void main() {
   group('a stored session is the whole session', () {
     test('everything written is read back', () async {
-      final Session s = await CouncilRun(
+      final Session ran = await CouncilRun(
         transport: ScriptedCouncil(),
         clock: FakeClock(),
       ).deliberate(referenceSession());
+      // With a client hold on the manifest, which a run driven by a scripted
+      // council never places on its own.
+      final Session s = ran.copyWith(
+        manifest: ran.manifest.held(
+          Hold(
+            from: DateTime.utc(2026, 3, 1, 9, 30),
+            until: DateTime.utc(2026, 3, 1, 9, 45),
+          ),
+        ),
+      );
 
       final Session back = Session.fromJson(
         jsonDecode(jsonEncode(s.toJson())) as Map<String, Object?>,
@@ -48,6 +58,13 @@ void main() {
         s.manifest.dryness!.secondAngleSet,
       );
       expect(back.manifest.councilTime, s.manifest.councilTime);
+      expect(
+        back.manifest.holds.length,
+        s.manifest.holds.length,
+        reason:
+            'A hold that did not survive the round trip would put its '
+            'minutes back into council time on the next read.',
+      );
     });
 
     test(

@@ -3,9 +3,10 @@
 Where the build actually is. Kept current as part of every change, because it
 is the only thing that tells the next session where we were.
 
-**Last updated:** the session that walked the whole workflow before shipping —
-the interview, the sitting, the dossier, assembly and the pitch — and fixed
-what that walk found.
+**Last updated:** the session after the first real sittings, which found the
+transport reading the wrong stream for the CLI's own failures, gave the client
+a pause, and made the sitting screen say what the council is doing and what it
+is costing. Decision 0021.
 
 ## Done
 
@@ -90,6 +91,28 @@ shape of them belongs where the next session will look.
   nothing about an expired login or a model name the CLI does not know, which
   are the two failures that actually end a sitting. It now puts a turn through
   and reports what came back, against the values as typed.
+
+## What the first real sittings changed
+
+- **The CLI speaks on stdout.** Under `--print` its own failures — a usage
+  limit above all — arrive as a `result` event with `is_error` set, and
+  stderr stays empty. The transport read stderr alone, so a spent block ended
+  the sitting as `The CLI exited with 1: ` with nothing after the colon, and
+  pressing Resume inside the same block did it again. Both streams are read
+  now, an exit that said nothing says so, and the fake council reports a limit
+  both ways.
+- **The client can pause.** `CouncilRun.hold()` is a gate in front of the
+  transport: turns already out finish and are kept, turns behind it wait, and
+  `release()` continues the round exactly where it was. Recorded on the
+  manifest as a `Hold`, excluded from council time, invisible to dryness.
+  Not a stop condition — a held run makes exactly the calls an unheld one
+  does, and the test says so.
+- **The sitting screen reads the run, not the store.** Directions, verdicts,
+  calls and tokens move as they happen; the round in progress is counted as
+  far as it has got; what is out with the council is named by purpose; and
+  the arithmetic of a round is written on the screen in the run's own
+  constants. The ledger costs each round in calls. The diagnostic log carries
+  the shape of the sitting and every round, pause, hold and stop.
 
 ## The seam to Master Prompt
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../assembly/integration.dart';
 import '../council/angles.dart';
 import '../council/dimensions.dart';
@@ -25,8 +27,9 @@ import 'run_clock.dart';
 class RunEvent {
   const RunEvent(this.kind, this.detail, {this.round = 0});
 
-  /// `round-opened`, `angle-returned`, `direction-kept`, `direction-refused`,
-  /// `rated`, `territory`, `paused`, `dropped`, `round-closed`, `dry`.
+  /// `round-opened`, `turn`, `angle-returned`, `angle-exhausted`,
+  /// `direction-kept`, `direction-refused`, `rated`, `judged`, `territory`,
+  /// `paused`, `held`, `released`, `round-closed`, `dry`.
   final String kind;
   final String detail;
   final int round;
@@ -62,6 +65,22 @@ class CouncilRun {
   final RunClock clock;
   final void Function(RunEvent)? onEvent;
 
+  /// How many directions one angle is asked for in a round.
+  static const int wantedPerAngle = 4;
+
+  /// What judging one kept direction costs in calls: one challenge, then a
+  /// rating and an invited dissent on every dimension. Published so a client
+  /// can say what a round will cost in the same arithmetic the run uses,
+  /// rather than in a figure that drifts from it.
+  static int get callsPerDirection => 1 + 2 * ratingDimensions.length;
+
+  /// The most calls one round can make at [breadth]: every angle proposing
+  /// its full quota and every proposal kept. An upper bound, not a plan —
+  /// duplicates are refused before they are judged, and the later rounds of a
+  /// real run keep far fewer than they propose.
+  static int mostCallsInRound(int breadth) =>
+      breadth * (1 + wantedPerAngle * callsPerDirection) + 1;
+
   /// Called with the session as it stands every time a round closes, and once
   /// more when the manifest is closed.
   ///
@@ -85,6 +104,53 @@ class CouncilRun {
 
   Session? _s;
   Session get _session => _s!;
+
+  Completer<void>? _held;
+  DateTime? _heldSince;
+
+  final Map<String, int> _inFlight = <String, int>{};
+
+  /// Turns that have gone to the transport and not yet come back, by purpose.
+  /// What the council is doing at this instant, for a screen that must not
+  /// claim to know more than that.
+  Map<String, int> get inFlight => Map<String, int>.unmodifiable(_inFlight);
+
+  /// True while the client has the sitting held.
+  bool get isHeld => _held != null;
+
+  /// Hold the sitting. Nothing new goes to the council until [release];
+  /// whatever is already in flight finishes and is kept, because a turn
+  /// already paid for is not made cheaper by throwing its reply away.
+  ///
+  /// **Not a stop condition.** A hold ends nothing, narrows nothing and is
+  /// invisible to the dryness decision: the round it interrupts completes,
+  /// with every angle it seated, once released. It is recorded in the
+  /// manifest as time the council was not deliberating, the way a provider
+  /// limit is, so a sitting held overnight is not reported as an overnight
+  /// deliberation.
+  void hold() {
+    if (_held != null) return;
+    _held = Completer<void>();
+    _heldSince = clock.now();
+    _emit('held', 'nothing new goes to the council until released');
+  }
+
+  /// Let a held sitting continue from exactly where it was.
+  void release() {
+    final Completer<void>? held = _held;
+    if (held == null) return;
+    final DateTime from = _heldSince!;
+    _held = null;
+    _heldSince = null;
+    final DateTime until = clock.now();
+    if (_s != null) {
+      _s = _session.copyWith(
+        manifest: _session.manifest.held(Hold(from: from, until: until)),
+      );
+    }
+    _emit('released', 'held ${until.difference(from).inMinutes} min');
+    held.complete();
+  }
 
   /// The session as the run has it, including a round in progress.
   ///
@@ -245,7 +311,7 @@ class CouncilRun {
       angle: angle,
       openGaps: _session.ledger.gaps,
       answers: _session.interview.answers,
-      wanted: 4,
+      wanted: wantedPerAngle,
     );
 
     final CouncilReply reply = await _ask(
@@ -264,15 +330,6 @@ class CouncilRun {
     // could parse are distinguishable on the record — dryness means the
     // first, and a run ended by the second is a run ended by a parser.
     final bool exhausted = parsed.of('mi-none').isNotEmpty;
-    if (exhausted) {
-      _emit('angle-exhausted', angle.name, round: round);
-    } else if (parsed.foundNothing) {
-      _emit(
-        'angle-returned',
-        '${angle.name}: nothing readable came back',
-        round: round,
-      );
-    }
     final List<String> proposedTitles = <String>[];
     final List<Direction> kept = <Direction>[];
 
@@ -320,6 +377,28 @@ class CouncilRun {
     }
 
     _recordAssumptions(parsed, round, kept);
+
+    // One event per angle, whatever it said, so a watcher can count the
+    // angles back against the breadth. The three cases stay distinguishable
+    // on the record: an angle that said it was exhausted, an angle whose
+    // reply nobody could read, and an angle that proposed — dryness means the
+    // first, and a run ended by the second is a run ended by a parser.
+    if (exhausted) {
+      _emit('angle-exhausted', angle.name, round: round);
+    } else if (parsed.foundNothing) {
+      _emit(
+        'angle-returned',
+        '${angle.name}: nothing readable came back',
+        round: round,
+      );
+    } else {
+      _emit(
+        'angle-returned',
+        '${angle.name}: ${kept.length} kept of ${proposedTitles.length} '
+            'proposed',
+        round: round,
+      );
+    }
 
     // Pipelined: this angle's directions are challenged and rated now, while
     // the other angles are still searching.
@@ -530,6 +609,7 @@ class CouncilRun {
       );
       _emit('rated', '${d.title}: ${dim.name} — $verdict', round: round);
     }
+    _emit('judged', d.title, round: round);
   }
 
   Future<List<Dissent>> _inviteDissent({
@@ -639,8 +719,25 @@ class CouncilRun {
   /// so the sitting resumes rather than restarting.
   Future<CouncilReply> _ask(CouncilTurn turn) async {
     while (true) {
+      // The hold gate. Checked before every call rather than once, because a
+      // turn retried after a provider pause must not slip past a hold placed
+      // during the wait.
+      while (_held != null) {
+        await _held!.future;
+      }
+      _inFlight[turn.purpose] = (_inFlight[turn.purpose] ?? 0) + 1;
       try {
-        final CouncilReply reply = await transport.ask(turn);
+        final CouncilReply reply;
+        try {
+          reply = await transport.ask(turn);
+        } finally {
+          final int left = (_inFlight[turn.purpose] ?? 1) - 1;
+          if (left <= 0) {
+            _inFlight.remove(turn.purpose);
+          } else {
+            _inFlight[turn.purpose] = left;
+          }
+        }
         _s = _session.copyWith(
           manifest: _session.manifest.record(
             ModelCall(
@@ -653,6 +750,12 @@ class CouncilRun {
               tokensOut: reply.tokensOut,
             ),
           ),
+        );
+        _emit(
+          'turn',
+          '${turn.purpose} by ${turn.agent.id}'
+              '${reply.tokensIn == 0 && reply.tokensOut == 0 ? '' : ' · ${reply.tokensIn} in, ${reply.tokensOut} out'}',
+          round: turn.agent.round,
         );
         return reply;
       } on CouncilPaused catch (p) {

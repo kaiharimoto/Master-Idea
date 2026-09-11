@@ -8,9 +8,12 @@
 // every turn on someone's desk.
 //
 // `MI_FAKE_LIMIT=1` makes it report a usage limit on stderr and nothing on
-// stdout, which is what the real CLI does: `Error.message` is non-enumerable
-// and the CLI serialises with a plain JSON.stringify, so limit text can never
-// reach the stdout JSON stream.
+// stdout. `MI_FAKE_LIMIT_STDOUT=1` reports one the other way, which is the way
+// the real CLI actually does it under `--print`: a `result` event on stdout
+// with `is_error` set and `"Claude AI usage limit reached|<epoch>"` as the
+// result, exit code 1, and nothing at all on stderr. `MI_FAKE_MUTE_EXIT=1`
+// exits 1 having said nothing on either stream, which a real one does when it
+// is killed by something outside it.
 import 'dart:convert';
 import 'dart:io';
 
@@ -115,6 +118,30 @@ Future<void> main(List<String> args) async {
       'Claude usage limit reached. Your limit resets at 3pm. retry after 5 '
       'seconds',
     );
+    exit(1);
+  }
+  if (Platform.environment['MI_FAKE_LIMIT_STDOUT'] == '1') {
+    // The real shape, field for field, as the CLI writes it under --print
+    // --output-format stream-json when a five-hour block is spent.
+    final int resetsAt =
+        DateTime.now().add(const Duration(hours: 2)).millisecondsSinceEpoch ~/
+        1000;
+    stdout.writeln(
+      jsonEncode(<String, Object?>{
+        'type': 'result',
+        'subtype': 'success',
+        'is_error': true,
+        'duration_ms': 812,
+        'duration_api_ms': 640,
+        'num_turns': 1,
+        'result': 'Claude AI usage limit reached|$resetsAt',
+        'session_id': 'fake-session',
+        'total_cost_usd': 0,
+      }),
+    );
+    exit(1);
+  }
+  if (Platform.environment['MI_FAKE_MUTE_EXIT'] == '1') {
     exit(1);
   }
 

@@ -110,6 +110,36 @@ class LimitPause {
   );
 }
 
+/// A wait the client imposed.
+///
+/// Kept apart from [LimitPause] because it means the opposite thing: a limit
+/// is the provider stopping the council, and a hold is the client asking it
+/// to wait. Nothing new goes out while a hold stands; whatever was already in
+/// flight finishes and is kept. Excluded from council time for the same
+/// reason a limit is — the council was not deliberating — but never read by
+/// the invariant suite as a threat to dryness, because a hold defers a round
+/// without cutting it: every angle that was seated still searches, after.
+@immutable
+class Hold {
+  const Hold({required this.from, required this.until});
+
+  final DateTime from;
+  final DateTime until;
+
+  Duration get length => until.difference(from);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'from': from.toIso8601String(),
+    'until': until.toIso8601String(),
+    'seconds': length.inSeconds,
+  };
+
+  static Hold fromJson(Map<String, Object?> j) => Hold(
+    from: DateTime.parse('${j['from']}'),
+    until: DateTime.parse('${j['until']}'),
+  );
+}
+
 /// The machine-written account of a run.
 @immutable
 class RunManifest {
@@ -122,6 +152,7 @@ class RunManifest {
     this.endedAt,
     this.calls = const <ModelCall>[],
     this.pauses = const <LimitPause>[],
+    this.holds = const <Hold>[],
     this.dryness,
   });
 
@@ -138,20 +169,35 @@ class RunManifest {
   final DateTime? endedAt;
   final List<ModelCall> calls;
   final List<LimitPause> pauses;
+
+  /// Every time the client held the sitting, with both ends.
+  final List<Hold> holds;
+
   final DrynessDecision? dryness;
 
   Duration get wallClock => (endedAt ?? startedAt).difference(startedAt);
 
-  /// Wall clock less every provider pause. This is what a tier's expectation
-  /// is compared against — a run that waited four hours for a limit to lift
-  /// did not deliberate for four hours.
+  /// Wall clock less every provider pause and every client hold. This is
+  /// what a tier's expectation is compared against — a run that waited four
+  /// hours for a limit to lift, or overnight for its client to come back,
+  /// did not deliberate for those hours.
   Duration get councilTime {
-    Duration paused = Duration.zero;
+    Duration away = Duration.zero;
     for (final LimitPause p in pauses) {
-      paused += p.length;
+      away += p.length;
     }
-    return wallClock - paused;
+    for (final Hold h in holds) {
+      away += h.length;
+    }
+    return wallClock - away;
   }
+
+  /// Calls made between two instants — one round's worth, when handed a
+  /// round's ends. The manifest is flat on purpose, so this is how a round is
+  /// costed after the fact.
+  int callsBetween(DateTime from, DateTime until) => calls
+      .where((ModelCall c) => !c.at.isBefore(from) && !c.at.isAfter(until))
+      .length;
 
   int get tokensIn => calls.fold(0, (int sum, ModelCall c) => sum + c.tokensIn);
   int get tokensOut =>
@@ -160,6 +206,8 @@ class RunManifest {
   RunManifest record(ModelCall c) => _copy(calls: <ModelCall>[...calls, c]);
 
   RunManifest paused(LimitPause p) => _copy(pauses: <LimitPause>[...pauses, p]);
+
+  RunManifest held(Hold h) => _copy(holds: <Hold>[...holds, h]);
 
   RunManifest closed(DateTime at, DrynessDecision d) =>
       _copy(endedAt: at, dryness: d);
@@ -175,6 +223,7 @@ class RunManifest {
   RunManifest _copy({
     List<ModelCall>? calls,
     List<LimitPause>? pauses,
+    List<Hold>? holds,
     DateTime? endedAt,
     DrynessDecision? dryness,
     String? transport,
@@ -187,6 +236,7 @@ class RunManifest {
     endedAt: endedAt ?? this.endedAt,
     calls: calls ?? this.calls,
     pauses: pauses ?? this.pauses,
+    holds: holds ?? this.holds,
     dryness: dryness ?? this.dryness,
   );
 
@@ -203,6 +253,7 @@ class RunManifest {
     'tokensOut': tokensOut,
     'calls': calls.map((ModelCall c) => c.toJson()).toList(),
     'pauses': pauses.map((LimitPause p) => p.toJson()).toList(),
+    'holds': holds.map((Hold h) => h.toJson()).toList(),
     if (dryness != null) 'dryness': dryness!.toJson(),
   };
 
@@ -218,6 +269,9 @@ class RunManifest {
         .toList(),
     pauses: (j['pauses'] as List<Object?>? ?? const <Object?>[])
         .map((Object? e) => LimitPause.fromJson(e! as Map<String, Object?>))
+        .toList(),
+    holds: (j['holds'] as List<Object?>? ?? const <Object?>[])
+        .map((Object? e) => Hold.fromJson(e! as Map<String, Object?>))
         .toList(),
     dryness: j['dryness'] == null
         ? null

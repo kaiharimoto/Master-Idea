@@ -12,12 +12,15 @@ import '../widgets/carry_panel.dart';
 /// **Quiet and grave.** There is no spinner here, no percentage, no agent
 /// chatter and no personality performing for an audience — because a sitting
 /// runs for hours and none of those things would be telling the truth about
-/// it. What there is instead: territory accumulating, round by round, and a
-/// plain statement of the only thing that can end it.
+/// it. What there is instead: territory accumulating, round by round, the
+/// round in progress counted as far as it has got, what every call is for
+/// and what they have cost, and a plain statement of the only thing that can
+/// end it.
 ///
 /// Nothing on this screen asks the client to stay. That is what a client
 /// relationship with a council requires: their work is at the beginning and
-/// the end, never in the middle.
+/// the end, never in the middle. What they may do in the middle is pause it,
+/// because the calls are theirs to pay for.
 class RunScreen extends StatelessWidget {
   const RunScreen({
     required this.library,
@@ -80,6 +83,13 @@ class RunScreen extends StatelessWidget {
             sitting.isBusy &&
             sitting.sessionId != null &&
             sitting.sessionId != open.id;
+        final bool here = sitting.isBusy && !elsewhere;
+        // The session as the run has it, not as the store has it. The store
+        // moves only at barriers, and a round at the largest tier is an hour
+        // in which nothing on a barrier-fed screen would move at all.
+        final Session shown = here ? (sitting.live ?? open) : open;
+        final RunManifest m = shown.manifest;
+        final RoundProgress? progress = here ? sitting.progress : null;
 
         return SingleChildScrollView(
           child: MiLeaf(
@@ -94,7 +104,7 @@ class RunScreen extends StatelessWidget {
                     tone: switch (sitting.phase) {
                       SittingPhase.failed => c.danger,
                       SittingPhase.finished => c.success,
-                      SittingPhase.paused => c.warning,
+                      SittingPhase.paused || SittingPhase.held => c.warning,
                       _ => c.inkMuted,
                     },
                   ),
@@ -121,20 +131,107 @@ class RunScreen extends StatelessWidget {
                     spacing: MiSpace.xxl,
                     runSpacing: MiSpace.md,
                     children: <Widget>[
-                      _count(c, 'Rounds closed', open.rounds.length),
-                      _count(c, 'Directions held', open.directions.length),
-                      _count(c, 'Verdicts recorded', open.ratings.length),
+                      _count(c, 'Rounds closed', '${shown.rounds.length}'),
+                      _count(
+                        c,
+                        'Directions held',
+                        '${shown.directions.length}',
+                      ),
+                      _count(c, 'Verdicts recorded', '${shown.ratings.length}'),
                       _count(
                         c,
                         'Territory mapped',
-                        open.ledger.territories.length,
+                        '${shown.ledger.territories.length}',
+                      ),
+                      _count(c, 'Model calls', _thousands(m.calls.length)),
+                      _count(
+                        c,
+                        'Tokens',
+                        m.calls.isEmpty
+                            ? '0'
+                            : m.tokensIn == 0 && m.tokensOut == 0
+                            ? 'not reported'
+                            : '${_thousands(m.tokensIn)} in · '
+                                  '${_thousands(m.tokensOut)} out',
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: MiSpace.lg),
+                const SizedBox(height: MiSpace.md),
 
-                if (sitting.pausedUntil != null) ...<Widget>[
+                // The round in progress, as far as it has got. Every figure
+                // here is a count of something that has happened; the one
+                // total that is known — the angles seated — is the only one
+                // written as "of".
+                if (progress != null) ...<Widget>[
+                  MiPanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Round ${progress.round} in progress',
+                          style: MiType.body.copyWith(
+                            color: c.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: MiSpace.sm),
+                        Wrap(
+                          spacing: MiSpace.xxl,
+                          runSpacing: MiSpace.md,
+                          children: <Widget>[
+                            _count(
+                              c,
+                              'Angles back',
+                              '${progress.anglesBack} of ${progress.breadth}'
+                                  '${progress.exhausted == 0 ? '' : ' · ${progress.exhausted} exhausted'}',
+                            ),
+                            _count(
+                              c,
+                              'Kept this round',
+                              '${progress.kept} · ${progress.judged} judged',
+                            ),
+                            _count(
+                              c,
+                              'Calls this round',
+                              _thousands(progress.calls),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: MiSpace.sm),
+                        Text(
+                          _inFlight(sitting.inFlight),
+                          style: MiType.caption.copyWith(color: c.inkMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.md),
+                ],
+
+                if (sitting.isHeld && here) ...<Widget>[
+                  MiPanel(
+                    accent: c.warning,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Paused by you. Nothing new is being sent to the '
+                          'council.',
+                          style: MiType.body.copyWith(color: c.ink),
+                        ),
+                        const SizedBox(height: MiSpace.xs),
+                        Text(
+                          '${_stillOut(sitting.inFlight)} The round picks up '
+                          'exactly where it was when you continue, and the '
+                          'time paused is not counted as council time.',
+                          style: MiType.caption.copyWith(color: c.inkMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: MiSpace.md),
+                ] else if (sitting.pausedUntil != null) ...<Widget>[
                   MiPanel(
                     accent: c.warning,
                     child: Column(
@@ -214,16 +311,31 @@ class RunScreen extends StatelessWidget {
                         ? 'The council deliberates on its own. You may watch, '
                               'and you may leave — it never waits on you, and '
                               'it ends only when two consecutive rounds return '
-                              'nothing new.'
+                              'nothing new. You can pause it at any time.'
                         : 'On a phone every turn is carried by hand: the app '
                               'gives you what to send and takes back what comes '
                               'of it. A sitting here is never unattended, which '
                               'is why the smallest tier is the honest one.',
                     style: MiType.caption.copyWith(color: c.inkMuted),
                   ),
-                ] else
+                ] else ...<Widget>[
+                  if (sitting.isHeld)
+                    MiButton(
+                      label: 'Continue the sitting',
+                      kind: MiButtonKind.primary,
+                      expand: true,
+                      onPressed: sitting.release,
+                    )
+                  else
+                    MiButton(
+                      label: 'Pause the sitting',
+                      expand: true,
+                      onPressed: sitting.hold,
+                    ),
+                  const SizedBox(height: MiSpace.sm),
                   MiButton(
                     label: 'Stop the sitting',
+                    kind: MiButtonKind.quiet,
                     expand: true,
                     onPressed: () async {
                       final bool stop = await showMiConfirm(
@@ -232,14 +344,27 @@ class RunScreen extends StatelessWidget {
                         body:
                             'Every round that has closed is kept, and the '
                             'sitting resumes from there whenever you open it '
-                            'again. The round in progress is lost.',
+                            'again. The round in progress is lost — to keep '
+                            'it, pause instead.',
                         action: 'Stop it',
                       );
                       if (stop) sitting.stop();
                     },
                   ),
+                ],
 
                 const SizedBox(height: MiSpace.lg),
+                const MiRule(),
+                // What the calls are, in the arithmetic the run itself uses,
+                // so a client watching a counter climb knows what it counts.
+                // An expectation, never a limit: nothing here can end a round.
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: MiSpace.sm),
+                  child: Text(
+                    _howCallsAreSpent(shown.template),
+                    style: MiType.caption.copyWith(color: c.inkMuted),
+                  ),
+                ),
                 const MiRule(),
                 // One line of it out here, because a screen whose only sign of
                 // life is behind a closed disclosure is indistinguishable from
@@ -285,14 +410,66 @@ class RunScreen extends StatelessWidget {
     );
   }
 
-  Widget _count(MiColors c, String label, int n) => MiField(
+  Widget _count(MiColors c, String label, String value) => MiField(
     label: label,
-    child: Text('$n', style: MiType.numeric.copyWith(color: c.ink)),
+    child: Text(value, style: MiType.numeric.copyWith(color: c.ink)),
   );
 
   static String _clock(DateTime at) =>
       '${at.hour.toString().padLeft(2, '0')}:'
       '${at.minute.toString().padLeft(2, '0')}';
+
+  static String _thousands(int n) {
+    final String s = '$n';
+    final StringBuffer b = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+      b.write(s[i]);
+    }
+    return b.toString();
+  }
+
+  /// What the seats out with the council are doing, in words.
+  static String _inFlight(Map<String, int> flying) {
+    if (flying.isEmpty) return 'Nothing is out with the council right now.';
+    const Map<String, String> doing = <String, String>{
+      'propose': 'proposing',
+      'challenge': 'challenging',
+      'rate': 'rating',
+      'dissent': 'weighing a dissent',
+      'map': 'mapping the territory',
+      'integrate': 'integrating',
+    };
+    final List<String> parts = <String>[
+      for (final MapEntry<String, int> e in flying.entries)
+        '${e.value} ${doing[e.key] ?? e.key}',
+    ];
+    return 'Out with the council now: ${parts.join(', ')}.';
+  }
+
+  static String _stillOut(Map<String, int> flying) {
+    final int n = flying.values.fold(0, (int a, int b) => a + b);
+    if (n == 0) return 'Nothing is out with the council.';
+    return '$n turn${n == 1 ? '' : 's'} already out ${n == 1 ? 'is' : 'are'} '
+        'finishing and will be kept.';
+  }
+
+  /// The cost of a round, in the run's own arithmetic.
+  static String _howCallsAreSpent(HarnessTemplate t) {
+    final int dims = ratingDimensions.length;
+    return 'How the calls are spent. A round seats ${t.angleBreadth} angles, '
+        'each a separate Claude process asked for up to '
+        '${CouncilRun.wantedPerAngle} directions from its own angle, blind to '
+        'the others. A direction that is new is challenged once, rated on '
+        '$dims dimensions by a fresh seat each, and every rating is offered a '
+        'dissent — ${CouncilRun.callsPerDirection} calls per kept direction, '
+        'so a round can run to '
+        '${_thousands(CouncilRun.mostCallsInRound(t.angleBreadth))} calls. '
+        'A proposal already held is refused before it is judged, which is why '
+        'later rounds cost far less than the first. The sitting ends only '
+        'when two consecutive rounds keep nothing new, so it always runs at '
+        'least two rounds past its last discovery.';
+  }
 
   String _status(Sitting s, {required bool elsewhere}) {
     if (elsewhere) return 'Sitting elsewhere';
@@ -301,6 +478,7 @@ class RunScreen extends StatelessWidget {
       SittingPhase.deliberating => 'The council is deliberating',
       SittingPhase.waitingForHand => 'Waiting to be carried',
       SittingPhase.paused => 'Waiting out a provider limit',
+      SittingPhase.held => 'Paused by you',
       SittingPhase.finished => 'The sitting has run dry',
       SittingPhase.failed => 'The sitting could not proceed',
     };

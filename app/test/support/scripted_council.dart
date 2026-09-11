@@ -9,9 +9,18 @@ import 'package:mi_core/mi_core.dart';
 /// and then says `mi-none` so the run reaches dryness instead of running for
 /// as long as the test is willing to wait.
 class ScriptedCouncil implements CouncilTransport {
-  ScriptedCouncil({this.silentFromRound = 2, this.failOnCall, this.stopOnCall});
+  ScriptedCouncil({
+    this.silentFromRound = 2,
+    this.failOnCall,
+    this.stopOnCall,
+    this.onCall,
+  });
 
   final int silentFromRound;
+
+  /// Called with the running call count before each call is answered, so a
+  /// test can hold the sitting from inside a turn rather than racing it.
+  final void Function(int calls)? onCall;
 
   /// Fail for a reason that is not a limit, the way an expired login does.
   final int? failOnCall;
@@ -26,6 +35,7 @@ class ScriptedCouncil implements CouncilTransport {
   Future<CouncilReply> ask(CouncilTurn turn) async {
     calls++;
     seen.add(turn);
+    onCall?.call(calls);
     if (failOnCall == calls) {
       throw CouncilUnavailable('The CLI exited with 1: not logged in');
     }

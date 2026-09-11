@@ -119,6 +119,21 @@ field. A round that returns nine good directions and one half-written one keeps
 the nine — `reply_parser_test.dart` proves it, and the parser keeps a block
 whose closing `end` never arrived for the same reason.
 
+**The CLI's own failures are on stdout, not stderr.** Under `--print` a
+usage limit, an expired login and an API error arrive as a `result` event
+with `is_error` set, and stderr is empty. The first transport read stderr
+alone, so a spent five-hour block ended a real sitting as `The CLI exited
+with 1: ` with nothing after the colon — a limit that lifts recorded as a
+failure that never does. `CliCouncil` reads both streams; the fake council
+reports a limit both ways, and a test holds each.
+
+**A pause is a gate in the run, never a kill in the transport.**
+`CouncilRun.hold()` stops new turns reaching the transport and lets the ones
+already out finish; `release()` continues the round where it was. It is not a
+stop condition — the held run makes exactly the calls the unheld one does —
+and a stop while held must release the gate *after* closing the transport, or
+the waiting turns wait forever.
+
 **`mi-none` is a standalone marker, not a block with fields.** It was being
 dropped by the parser, because the end-of-input path only kept blocks that had
 fields. 'My angle is exhausted' is the single most consequential thing a seat

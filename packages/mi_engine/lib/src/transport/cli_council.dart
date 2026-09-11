@@ -207,12 +207,24 @@ class CliCouncil implements CouncilTransport {
       );
     }
 
-    // A usage limit is reported on **stderr and nowhere else**. `Error.message`
-    // is non-enumerable and the CLI serialises with a plain JSON.stringify, so
-    // limit text can never appear in the stdout JSON stream — a detector that
-    // greps stdout matches nothing, forever, and presents as a hang.
+    // The account of a failure is on **both streams, and usually only one**.
+    // An unknown flag or a crash goes to stderr. A usage limit, an expired
+    // login and an API error under `--print` go to *stdout*, as a `result`
+    // event with `is_error` set — `"Claude AI usage limit reached|<epoch>"`
+    // — and stderr stays empty. The first build of this read stderr alone,
+    // on the belief that limit text could never reach the JSON stream; a real
+    // sitting then ended on "The CLI exited with 1: " with nothing after the
+    // colon, and a limit that would have lifted in two hours was recorded as
+    // a failure that never does.
+    final String said = _errorAccount(out.toString());
+    final bool cliSaidError = said.isNotEmpty;
+    final String account = <String>[
+      err.toString().trim(),
+      said,
+    ].where((String s) => s.isNotEmpty).join('\n');
+
     final LimitReading reading = LimitReader.read(
-      err.toString(),
+      account,
       now: _now(),
       blockStartedAt: _blockStartedAt,
       patterns: patterns,
@@ -226,7 +238,7 @@ class CliCouncil implements CouncilTransport {
       );
     }
 
-    if (code != 0) {
+    if (code != 0 || cliSaidError) {
       // Everything else fails the sitting where it stands. None of these lift
       // by waiting, and a run that waits them out loses every search and then
       // records the provider's silence as the council's.
@@ -237,11 +249,62 @@ class CliCouncil implements CouncilTransport {
         FailureKind.overage =>
           'The account has no credit left for this. Waiting will not lift it. '
               '${reading.detail}',
-        _ => 'The CLI exited with $code: ${reading.detail}',
+        _ when reading.detail.isEmpty =>
+          // Said plainly, because an empty reason after a colon reads as the
+          // app having forgotten to say — and the one thing a client can act
+          // on here is that the CLI itself, run by hand, will show why.
+          'The Claude CLI exited with code $code and wrote nothing on either '
+              'stream. Run it once by hand from a terminal to see what it '
+              'says; the commonest causes are a usage limit and a login '
+              'that has expired.',
+        _ => 'The Claude CLI exited with code $code: ${reading.detail}',
       });
     }
 
     return _read(out.toString());
+  }
+
+  /// What the CLI said went wrong, read out of the stdout event stream.
+  ///
+  /// Under `--print` the CLI's own failures — a usage limit, an expired
+  /// login, an API error — arrive as a `result` event with `is_error` set and
+  /// the reason in `result`, or as an `error` event; stderr carries nothing.
+  /// Empty when no event claimed an error.
+  static String _errorAccount(String stdout) {
+    final List<String> said = <String>[];
+    for (final String line in stdout.split('\n')) {
+      final String trimmed = line.trim();
+      if (!trimmed.startsWith('{')) continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(trimmed);
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map<String, Object?>) continue;
+      final String type = '${decoded['type'] ?? ''}';
+      final String subtype = '${decoded['subtype'] ?? ''}';
+      final bool claimsError =
+          decoded['is_error'] == true ||
+          type == 'error' ||
+          subtype.startsWith('error');
+      if (!claimsError) continue;
+
+      final Object? result = decoded['result'];
+      if (result is String && result.trim().isNotEmpty) said.add(result.trim());
+      final Object? error = decoded['error'];
+      if (error is String && error.trim().isNotEmpty) said.add(error.trim());
+      if (error is Map<String, Object?>) {
+        final Object? message = error['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          said.add(message.trim());
+        }
+      }
+      // An error event that carried no words still carried its subtype, and
+      // `error_max_turns` or `error_during_execution` is more than nothing.
+      if (said.isEmpty && subtype.isNotEmpty) said.add(subtype);
+    }
+    return said.join('\n');
   }
 
   /// Pull the assistant's text and its usage out of whatever the build wrote.

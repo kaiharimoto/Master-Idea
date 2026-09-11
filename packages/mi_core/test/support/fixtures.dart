@@ -46,7 +46,13 @@ class ScriptedCouncil implements CouncilTransport {
     this.failOnCall,
     this.unsourcedInRound,
     this.dissentEvery = 3,
+    this.onCall,
   });
+
+  /// Called with the running call count on every call, before it is
+  /// answered, so a test can act on the run — hold it, say — from inside a
+  /// turn, at the one moment the timing is not left to chance.
+  final void Function(int calls)? onCall;
 
   /// How many directions each angle returns while it still has any.
   final int perAngle;
@@ -90,6 +96,7 @@ class ScriptedCouncil implements CouncilTransport {
   Future<CouncilReply> ask(CouncilTurn turn) async {
     calls++;
     seen.add(turn);
+    onCall?.call(calls);
     if (pauseOnCall != null && calls == pauseOnCall && !_paused) {
       _paused = true;
       throw CouncilPaused(

@@ -188,6 +188,85 @@ void main() {
     );
   });
 
+  group('a hold is the client waiting, never the council stopping', () {
+    test(
+      'nothing new is sent while held, and the run continues whole after',
+      () async {
+        late final CouncilRun run;
+        final ScriptedCouncil council = ScriptedCouncil(
+          onCall: (int n) {
+            if (n == 2) run.hold();
+          },
+        );
+        final FakeClock clock = FakeClock();
+        run = CouncilRun(transport: council, clock: clock);
+        final Future<Session> finishing = run.deliberate(referenceSession());
+
+        // Let everything that can run without the council, run.
+        for (int i = 0; i < 20; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(run.isHeld, isTrue);
+        expect(
+          council.calls,
+          2,
+          reason:
+              'The call that placed the hold and the one before it were '
+              'already in flight; every angle behind them must wait at the '
+              'gate rather than reach the transport.',
+        );
+
+        run.release();
+        final Session done = await finishing;
+
+        final ScriptedCouncil unheld = ScriptedCouncil();
+        await CouncilRun(
+          transport: unheld,
+          clock: FakeClock(),
+        ).deliberate(referenceSession());
+        expect(
+          council.calls,
+          unheld.calls,
+          reason:
+              'A hold defers the round without cutting it: the same search '
+              'is made, in full, once released — nothing lost and nothing '
+              'repeated.',
+        );
+        expect(done.manifest.dryness, isNotNull);
+        expect(done.manifest.holds, hasLength(1));
+        expect(
+          done.manifest.councilTime,
+          lessThan(done.manifest.wallClock),
+          reason:
+              'A sitting held overnight did not deliberate overnight, and a '
+              'manifest that said so would make the tier expectation '
+              'meaningless.',
+        );
+        expect(
+          InvariantSuite.run(done).findings,
+          isEmpty,
+          reason:
+              'A hold overlapping a deciding round is not the provider '
+              'silencing the council, and must not read as one.',
+        );
+      },
+    );
+
+    test('holding and releasing a run that is not held is harmless', () {
+      final CouncilRun run = CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      );
+      run.release();
+      expect(run.isHeld, isFalse);
+      run.hold();
+      run.hold();
+      expect(run.isHeld, isTrue);
+      run.release();
+      expect(run.isHeld, isFalse);
+    });
+  });
+
   group('the record a run leaves', () {
     test('every model call is accounted for in the manifest', () async {
       final ScriptedCouncil council = ScriptedCouncil();

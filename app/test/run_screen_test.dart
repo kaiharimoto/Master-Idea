@@ -98,6 +98,47 @@ void main() {
     expect(library.open, isNotNull);
   });
 
+  testWidgets('the sitting can be paused and continued from the screen', (
+    WidgetTester tester,
+  ) async {
+    final (Library library, Sitting sitting, Session session) = await ready(
+      tester,
+    );
+    await tester.tap(find.text('Open the sitting'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Pause the sitting'), findsOneWidget);
+    expect(find.text('Copy this turn'), findsOneWidget);
+
+    await tester.tap(find.text('Pause the sitting'));
+    await tester.pump();
+
+    // The status tag sets its text in capitals.
+    expect(find.text('PAUSED BY YOU'), findsOneWidget);
+    expect(find.textContaining('Nothing new is being sent'), findsOneWidget);
+    expect(find.text('Continue the sitting'), findsOneWidget);
+    expect(
+      find.text('Stop the sitting'),
+      findsOneWidget,
+      reason: 'Pausing must not take away the way out.',
+    );
+    expect(
+      find.text('Copy this turn'),
+      findsOneWidget,
+      reason:
+          'A turn already out is still out: pausing stops new turns, it does '
+          'not take back the one on screen.',
+    );
+
+    await tester.tap(find.text('Continue the sitting'));
+    await tester.pump();
+    expect(find.text('Pause the sitting'), findsOneWidget);
+    expect(find.text('PAUSED BY YOU'), findsNothing);
+
+    sitting.stop();
+    await tester.pump();
+  });
+
   testWidgets('an unreadable paste says so instead of being accepted quietly', (
     WidgetTester tester,
   ) async {

@@ -117,10 +117,7 @@ void main() {
   });
 
   test('a usage limit arrives as a pause, from stderr', () async {
-    // The real CLI can only report a limit on stderr: Error.message is
-    // non-enumerable and the CLI serialises with a plain JSON.stringify, so
-    // limit text never reaches the stdout JSON stream. A detector that greps
-    // stdout matches nothing, forever, and presents as a hang.
+    // One of the two places a limit can arrive. The other is below.
     final CliCouncil council = CliCouncil(
       install: await install(),
       workingDirectory: '${tmp.path}/council',
@@ -149,6 +146,61 @@ void main() {
     prompt: 'You are a prospector on a council.',
     conversation: 'propose-1-inversion',
   );
+
+  test('a usage limit reported on stdout, as the real CLI reports it, is a '
+      'pause with the time the provider gave', () async {
+    // Under --print the CLI puts its own failures on stdout as a result
+    // event with is_error set, and writes nothing to stderr. A transport that
+    // read stderr alone ended a real sitting on "The CLI exited with 1: " —
+    // nothing after the colon — and recorded a limit that lifts in two hours
+    // as a failure that never does.
+    final CliCouncil council = CliCouncil(
+      install: await install(),
+      workingDirectory: '${tmp.path}/council',
+      environment: const <String, String>{'MI_FAKE_LIMIT_STDOUT': '1'},
+    );
+    await expectLater(
+      council.ask(turn()),
+      throwsA(
+        isA<CouncilPaused>()
+            .having((CouncilPaused p) => p.kind, 'kind', 'session')
+            .having(
+              (CouncilPaused p) => p.source,
+              'source',
+              ResetSource.explicit,
+            )
+            .having(
+              (CouncilPaused p) => p.detail,
+              'detail',
+              contains('usage limit reached'),
+            ),
+      ),
+      reason:
+          'The epoch after the bar is the provider stating when the block '
+          'ends, and a resume time it stated is worth more than a guess.',
+    );
+  });
+
+  test('an exit that said nothing on either stream says so', () async {
+    final CliCouncil council = CliCouncil(
+      install: await install(),
+      workingDirectory: '${tmp.path}/council',
+      environment: const <String, String>{'MI_FAKE_MUTE_EXIT': '1'},
+    );
+    await expectLater(
+      council.ask(turn()),
+      throwsA(
+        isA<CouncilUnavailable>().having(
+          (CouncilUnavailable e) => e.detail,
+          'detail',
+          contains('wrote nothing on either stream'),
+        ),
+      ),
+      reason:
+          'An empty reason after a colon reads as the app having forgotten to '
+          'say, and gives the client nothing to act on.',
+    );
+  });
 
   group('a failure that is not a limit', () {
     test('an expired login fails the sitting rather than pausing it', () async {

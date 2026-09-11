@@ -25,9 +25,68 @@ enum SittingPhase {
   idle,
   deliberating,
   waitingForHand,
+
+  /// Waiting out a provider limit. The provider's, not the client's.
   paused,
+
+  /// Held by the client. Nothing new goes out until they say so.
+  held,
   finished,
   failed,
+}
+
+/// Where the round in progress has got to, counted from the run's events.
+///
+/// Counts of things that have happened, never a fraction of a total: the
+/// angles seated are known, and so are the directions kept so far, but how
+/// many more will be kept is what the round exists to find out.
+@immutable
+class RoundProgress {
+  const RoundProgress({
+    required this.round,
+    required this.breadth,
+    this.anglesBack = 0,
+    this.exhausted = 0,
+    this.kept = 0,
+    this.judged = 0,
+    this.calls = 0,
+  });
+
+  final int round;
+
+  /// Angles seated this round.
+  final int breadth;
+
+  /// Angles that have returned, exhausted or not.
+  final int anglesBack;
+
+  /// Of those, the ones that said their angle had nothing left.
+  final int exhausted;
+
+  /// Directions accepted this round so far.
+  final int kept;
+
+  /// Of those, the ones fully challenged and rated.
+  final int judged;
+
+  /// Model calls completed this round.
+  final int calls;
+
+  RoundProgress copyWith({
+    int? anglesBack,
+    int? exhausted,
+    int? kept,
+    int? judged,
+    int? calls,
+  }) => RoundProgress(
+    round: round,
+    breadth: breadth,
+    anglesBack: anglesBack ?? this.anglesBack,
+    exhausted: exhausted ?? this.exhausted,
+    kept: kept ?? this.kept,
+    judged: judged ?? this.judged,
+    calls: calls ?? this.calls,
+  );
 }
 
 /// How a transport is opened. Injected only so a widget test can drive a whole
@@ -76,6 +135,26 @@ class Sitting extends ChangeNotifier {
   /// The live transport, kept so that a stop can actually reach it.
   CouncilTransport? _transport;
 
+  /// The run itself, while one is deliberating. Kept so a hold can reach it
+  /// and so the screen can read the session as the run has it — the stored
+  /// copy moves only at barriers, and a round at the largest tier is an hour
+  /// of nothing moving on a screen that is supposed to be watchable.
+  CouncilRun? _run;
+
+  /// The session as the run has it right now, round in progress included.
+  /// Null when nothing is deliberating.
+  Session? get live => _run?.sessionSoFar;
+
+  /// Turns out with the council at this instant, by purpose.
+  Map<String, int> get inFlight => _run?.inFlight ?? const <String, int>{};
+
+  RoundProgress? _progress;
+
+  /// The round in progress, as far as it has got.
+  RoundProgress? get progress => _progress;
+
+  bool get isHeld => _phase == SittingPhase.held;
+
   SittingRoute? _route;
   SittingRoute? get route => _route;
 
@@ -104,7 +183,8 @@ class Sitting extends ChangeNotifier {
   bool get isBusy =>
       _phase == SittingPhase.deliberating ||
       _phase == SittingPhase.waitingForHand ||
-      _phase == SittingPhase.paused;
+      _phase == SittingPhase.paused ||
+      _phase == SittingPhase.held;
 
   /// True when a turn is on screen waiting to be carried.
   bool get needsHand => _hand?.isWaiting ?? false;
@@ -116,6 +196,7 @@ class Sitting extends ChangeNotifier {
     _events.clear();
     _problem = null;
     _pausedUntil = null;
+    _progress = null;
     _sessionId = session.id;
     _route = canDrive ? SittingRoute.cli : SittingRoute.handover;
     _phase = SittingPhase.deliberating;
@@ -126,6 +207,17 @@ class Sitting extends ChangeNotifier {
       settings,
     );
     if (transport == null) return;
+
+    // Everything a report needs to say what this sitting was, in one line,
+    // before anything can go wrong. The diagnostic log used to hold nothing
+    // between "Started" and the failure — forty minutes of sitting with no
+    // account of its tier, breadth, route or model.
+    Diagnostics.instance.log(
+      'Opened sitting ${session.id} at tier ${session.template.name}: '
+      'breadth ${session.template.angleBreadth}, resuming at round '
+      '${session.rounds.length + 1}, route ${_route!.name}'
+      '${_route == SittingRoute.cli ? ', model ${settings.model.trim().isEmpty ? 'default' : settings.model.trim()}, ${settings.concurrentTurns} concurrent turns' : ''}.',
+    );
 
     // Recorded when the sitting opens rather than when the session did,
     // because the route is a fact about the device this run happened on — and
@@ -148,24 +240,30 @@ class Sitting extends ChangeNotifier {
           await library.save(s);
         },
       );
+      _run = run;
       final Session done = await run.deliberate(running);
       await library.save(done);
       _phase = SittingPhase.finished;
       Diagnostics.instance.log(
         'Sitting ${session.id} went dry with ${done.directions.length} '
-        'directions.',
+        'directions after ${done.manifest.calls.length} model calls.',
       );
     } on CouncilStopped {
       // A stop is a fact about the client, not a diagnosis about the sitting,
       // and nothing needs saving here: every round that closed went to disk
       // through the barrier callback as it closed.
       _phase = SittingPhase.idle;
+      Diagnostics.instance.log(
+        'Sitting ${session.id} stopped by the client with '
+        '${running.rounds.length} round(s) stored.',
+      );
     } on CouncilUnavailable catch (e) {
       _fail(e.detail);
     } on Object catch (e) {
       _fail('The sitting stopped: $e');
     } finally {
       _pausedUntil = null;
+      _run = null;
       _hand?.removeListener(_handMoved);
       _hand?.dispose();
       _hand = null;
@@ -173,6 +271,17 @@ class Sitting extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Hold the sitting where it is. Nothing new goes to the council; the turns
+  /// already out come back and are kept. [release] lets it continue.
+  ///
+  /// The client's pause, as distinct from the provider's: a limit is waited
+  /// out by the run on its own, and this is waited out by the client. Neither
+  /// is a stop, and neither reaches the dryness decision.
+  void hold() => _run?.hold();
+
+  /// Let a held sitting continue from exactly where it was.
+  void release() => _run?.release();
 
   /// Compute what a selection becomes together.
   ///
@@ -299,16 +408,73 @@ class Sitting extends ChangeNotifier {
     // asking the client to stay. The events are kept so the ledger fills
     // as it happens, not so a log can scroll.
     if (_events.length > 500) _events.removeAt(0);
+
+    _count(e);
+
+    // The lines a report afterwards needs: the shape of every round, and
+    // every time the sitting was not deliberating and why. Not every turn —
+    // a round is hundreds of them, and a ring of four hundred lines would
+    // hold twenty minutes of a six-hour sitting.
+    switch (e.kind) {
+      case 'round-opened' ||
+          'round-closed' ||
+          'paused' ||
+          'held' ||
+          'released' ||
+          'dry':
+        Diagnostics.instance.log('$e');
+      default:
+        break;
+    }
+
     if (e.kind == 'paused') {
       _pausedUntil = _untilIn(e.detail);
-      _phase = SittingPhase.paused;
-    } else if (_phase == SittingPhase.paused) {
+    } else if (_pausedUntil != null &&
+        !DateTime.now().isBefore(_pausedUntil!)) {
+      // Cleared by the clock, not by the next event. Turns already out when
+      // the limit hit still come back, and one of them returning is not the
+      // limit lifting.
       _pausedUntil = null;
+    }
+    _settle();
+    notifyListeners();
+  }
+
+  /// The phase, derived from what is true rather than from the last event.
+  void _settle() {
+    if (!isBusy) return;
+    if (_run?.isHeld ?? false) {
+      _phase = SittingPhase.held;
+    } else if (_pausedUntil != null) {
+      _phase = SittingPhase.paused;
+    } else {
       _phase = needsHand
           ? SittingPhase.waitingForHand
           : SittingPhase.deliberating;
     }
-    notifyListeners();
+  }
+
+  void _count(RunEvent e) {
+    if (e.kind == 'round-opened') {
+      _progress = RoundProgress(
+        round: e.round,
+        breadth: live?.template.angleBreadth ?? 0,
+      );
+      return;
+    }
+    final RoundProgress? p = _progress;
+    if (p == null || e.round != p.round) return;
+    _progress = switch (e.kind) {
+      'angle-returned' => p.copyWith(anglesBack: p.anglesBack + 1),
+      'angle-exhausted' => p.copyWith(
+        anglesBack: p.anglesBack + 1,
+        exhausted: p.exhausted + 1,
+      ),
+      'direction-kept' => p.copyWith(kept: p.kept + 1),
+      'judged' => p.copyWith(judged: p.judged + 1),
+      'turn' => p.copyWith(calls: p.calls + 1),
+      _ => p,
+    };
   }
 
   /// The resume time out of a pause event, which carries it as an ISO string.
@@ -319,10 +485,7 @@ class Sitting extends ChangeNotifier {
   }
 
   void _handMoved() {
-    if (_phase == SittingPhase.paused) return;
-    _phase = (_hand?.isWaiting ?? false)
-        ? SittingPhase.waitingForHand
-        : SittingPhase.deliberating;
+    _settle();
     notifyListeners();
   }
 
@@ -337,6 +500,10 @@ class Sitting extends ChangeNotifier {
     _closeTransport();
     _phase = SittingPhase.idle;
     _pausedUntil = null;
+    // A held run has turns waiting at its gate. Released after the transport
+    // is closed, they reach it and are refused as stopped, which is how the
+    // run ends — left held, they would wait on a completer nobody completes.
+    _run?.release();
     notifyListeners();
   }
 
