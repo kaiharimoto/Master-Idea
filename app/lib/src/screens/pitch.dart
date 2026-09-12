@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mi_core/mi_core.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../widgets/document_actions.dart';
 
 /// The export: a launch document built from what the client selected.
 ///
@@ -13,10 +13,19 @@ import '../store/library.dart';
 /// part is a small line-oriented block at the end, which is what lets Master
 /// Prompt open a mission from this without anything being retyped.
 class PitchScreen extends StatelessWidget {
-  const PitchScreen({required this.library, required this.session, super.key});
+  const PitchScreen({
+    required this.library,
+    required this.session,
+    required this.onOpenAssembly,
+    super.key,
+  });
 
   final Library library;
   final Session session;
+
+  /// An empty state that names the next step and cannot reach it is a dead
+  /// end with better manners.
+  final VoidCallback onOpenAssembly;
 
   @override
   Widget build(BuildContext context) {
@@ -25,12 +34,17 @@ class PitchScreen extends StatelessWidget {
     final String pitch = s.pitch;
 
     if (pitch.isEmpty) {
-      return const MiEmpty(
+      return MiEmpty(
         title: 'There is no pitch yet',
         detail:
             'Select directions in Assembly and have the council compute what '
             'they become together. The pitch is made of that, and of nothing '
-            'the client did not choose.',
+            'you did not choose.',
+        action: MiButton(
+          label: 'Go to Assembly',
+          kind: MiButtonKind.primary,
+          onPressed: onOpenAssembly,
+        ),
       );
     }
 
@@ -43,25 +57,16 @@ class PitchScreen extends StatelessWidget {
           children: <Widget>[
             const MiEyebrow('Pitch prompt'),
             const SizedBox(height: MiSpace.sm),
-            Row(
-              children: <Widget>[
-                MiButton(
-                  label: 'Copy the whole thing',
-                  onPressed: () =>
-                      Clipboard.setData(ClipboardData(text: pitch)),
-            kind: MiButtonKind.primary,),
-                const SizedBox(width: MiSpace.md),
-                Expanded(
-                  child: Text(
-                    tells.isEmpty
-                        ? 'Portable: nothing in it ties it to one provider.'
-                        : 'Not portable — found ${tells.join(', ')}.',
-                    style: MiType.caption.copyWith(
-                      color: tells.isEmpty ? c.inkMuted : c.warning,
-                    ),
-                  ),
-                ),
-              ],
+            // A row rather than a Row: at a large text scale the button and
+            // the note beside it overflowed the line they shared.
+            DocumentActions(filename: '${s.taskId}-pitch.md', text: pitch),
+            Text(
+              tells.isEmpty
+                  ? 'Portable: nothing in it ties it to one provider.'
+                  : 'Not portable — found ${tells.join(', ')}.',
+              style: MiType.caption.copyWith(
+                color: tells.isEmpty ? c.inkMuted : c.warning,
+              ),
             ),
             const SizedBox(height: MiSpace.lg),
             MiRule(strong: true),

@@ -13,9 +13,8 @@ import 'package:master_idea/src/update/release.dart';
 /// asset names CI actually produced. If the naming in the workflow and the
 /// patterns in `release.dart` ever drift apart, an installed copy silently
 /// stops seeing updates forever — and this is the test that fails first.
-Object? published() => jsonDecode(
-  File('test/fixtures/dev_release.json').readAsStringSync(),
-);
+Object? published() =>
+    jsonDecode(File('test/fixtures/dev_release.json').readAsStringSync());
 
 void main() {
   group('the release CI actually published', () {
@@ -28,8 +27,11 @@ void main() {
       expect(c.outcome, UpdateOutcome.available, reason: c.detail);
       expect(c.asset!.name, endsWith('.apk'));
       expect(c.asset!.kind, AssetKind.apk);
-      expect(c.asset!.bytes, greaterThan(10 * 1024 * 1024),
-          reason: 'The size is shown before a download on a metered phone.');
+      expect(
+        c.asset!.bytes,
+        greaterThan(10 * 1024 * 1024),
+        reason: 'The size is shown before a download on a metered phone.',
+      );
     });
 
     test('a Windows build is offered the installer, not the zip', () {
@@ -39,10 +41,13 @@ void main() {
         platform: UpdatePlatform.windows,
       );
       expect(c.outcome, UpdateOutcome.available, reason: c.detail);
-      expect(c.asset!.kind, AssetKind.installer,
-          reason:
-              'Both shapes are published; the installer is the one that can '
-              'replace the app without the user handling a file.');
+      expect(
+        c.asset!.kind,
+        AssetKind.installer,
+        reason:
+            'Both shapes are published; the installer is the one that can '
+            'replace the app without the user handling a file.',
+      );
       expect(c.asset!.name, endsWith('.exe'));
     });
 
@@ -75,15 +80,17 @@ void main() {
         platform: UpdatePlatform.android,
       );
       expect(same.outcome, UpdateOutcome.upToDate);
-      expect(same.isUpdate, isFalse,
-          reason:
-              'An app that offers itself the build it is already running '
-              'downloads fifty megabytes for nothing, every launch.');
+      expect(
+        same.isUpdate,
+        isFalse,
+        reason:
+            'An app that offers itself the build it is already running '
+            'downloads fifty megabytes for nothing, every launch.',
+      );
     });
 
     test('every published asset is one the updater can name', () {
-      final Map<String, Object?> payload =
-          published()! as Map<String, Object?>;
+      final Map<String, Object?> payload = published()! as Map<String, Object?>;
       final List<Object?> assets = payload['assets']! as List<Object?>;
       final Set<String> recognised = <String>{
         for (final UpdatePlatform p in <UpdatePlatform>[
@@ -99,8 +106,9 @@ void main() {
       for (final Object? a in assets) {
         final String name = (a! as Map<String, Object?>)['name']! as String;
         expect(
-          RegExp(r'^MasterIdea(Setup)?(-windows-x64)?-\d+-[0-9a-f]{7}\.(apk|exe|zip)$')
-              .hasMatch(name),
+          RegExp(
+            r'^MasterIdea(Setup)?(-windows-x64)?-\d+-[0-9a-f]{7}\.(apk|exe|zip)$',
+          ).hasMatch(name),
           isTrue,
           reason:
               '$name does not match any pattern the updater knows, so no '

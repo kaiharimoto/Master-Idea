@@ -10,6 +10,30 @@ Future<Session> goodSession() => CouncilRun(
 ).deliberate(referenceSession());
 
 void main() {
+  group('the map is what lets an assize trace what it found', () {
+    test(
+      'a run at the largest tier leaves no shared-answer findings',
+      () async {
+        final Session done = await CouncilRun(
+          transport: ScriptedCouncil(),
+          clock: FakeClock(),
+        ).deliberate(referenceSession(templateId: 'assize'));
+
+        expect(
+          InvariantSuite.run(done).forInvariant(Invariant.traceability),
+          isEmpty,
+          reason:
+              'The blind spot was the first rounds of a tier whose barrier is '
+              'three. The run cannot refuse a shared answer while a round is '
+              'open — it is a property of the whole kept set, and the accept '
+              'path may not wait on one — so the suite found afterwards what '
+              'nothing could prevent during. Drawing the map at round one '
+              'removes the condition instead of checking for it.',
+        );
+      },
+    );
+  });
+
   group('a session the council actually ran', () {
     test('holds all three invariants', () async {
       final Session s = await goodSession();
@@ -307,5 +331,38 @@ void main() {
         );
       },
     );
+  });
+
+  group('a session that was tampered with', () {
+    test('reports a seat id nobody could have issued, rather than '
+        'crashing on it', () async {
+      final Session s = await goodSession();
+      final Rating r = s.ratings.first;
+      final Session broken = s.copyWith(
+        ratings: <Rating>[
+          Rating(
+            directionId: r.directionId,
+            dimensionId: r.dimensionId,
+            verdict: r.verdict,
+            vocabularyId: r.vocabularyId,
+            ratedBy: 'whoever felt like it',
+            context: r.context,
+            because: r.because,
+            dissents: r.dissents,
+          ),
+          ...s.ratings.skip(1),
+        ],
+      );
+
+      final InvariantReport report = InvariantSuite.run(broken);
+      expect(
+        report.holdsFor(Invariant.independentRating),
+        isFalse,
+        reason:
+            'This suite exists to catch a doctored session. A check that '
+            'throws on the malformed input it is looking for crashes the '
+            'tool instead of failing the session.',
+      );
+    });
   });
 }

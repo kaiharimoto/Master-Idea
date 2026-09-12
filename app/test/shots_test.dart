@@ -27,8 +27,9 @@ Future<void> loadFonts() async {
     'Inter-Bold',
   ]) {
     final File f = File('../packages/mi_design/assets/fonts/$face.ttf');
-    final FontLoader loader = FontLoader('packages/mi_design/Inter')
-      ..addFont(Future<ByteData>.value(f.readAsBytesSync().buffer.asByteData()));
+    final FontLoader loader = FontLoader(
+      'packages/mi_design/Inter',
+    )..addFont(Future<ByteData>.value(f.readAsBytesSync().buffer.asByteData()));
     await loader.load();
   }
 }
@@ -77,12 +78,15 @@ void main() {
   });
 
   testWidgets('sitting', (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 950);
+    tester.view.physicalSize = const Size(1400, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final Library library = Library(inMemory: true);
     await library.load();
-    await library.begin(interview());
+    // Four rounds of a real shape, because an empty sitting shows only empty
+    // states and this screen's whole job is what it looks like with a run
+    // behind it.
+    await library.save(_afterFourRounds(await library.begin(interview())));
     await tester.pumpWidget(
       MasterIdeaApp(library: library, updater: offlineUpdater()),
     );
@@ -166,7 +170,8 @@ Session _withDirections(Session s) {
           Dissent(
             by: 'dissenter#1.1',
             verdict: 'gestured',
-            because: 'The index is the hard half and it is described in a line.',
+            because:
+                'The index is the hard half and it is described in a line.',
           ),
         ],
       ),
@@ -190,5 +195,192 @@ Session _withDirections(Session s) {
         answersUnknownId: 'u-length',
       ),
     ],
+  );
+}
+
+/// A session as it stands four rounds in: the arc bending toward dryness,
+/// clusters with weight, ground mapped, and the calls that bought it.
+Session _afterFourRounds(Session base) {
+  DateTime at(int m) => DateTime.utc(2026, 3, 1, 9, m);
+  const List<String> angles = <String>[
+    'inversion',
+    'first-principles',
+    'audience-shift',
+    'failure-autopsy',
+  ];
+  const List<(String, String)> clusters = <(String, String)>[
+    ('what-it-is-for', 'What the thing is for'),
+    ('who-for', 'Who it is for'),
+    ('how-it-survives', 'How it survives'),
+    ('what-it-refuses', 'What it refuses'),
+  ];
+  const List<String> titles = <String>[
+    'Sell the archive, keep the index',
+    'Charge the reader, never the writer',
+    'Refuse every commission over a week long',
+    'Publish the failures beside the findings',
+    'Let the council be hired, not the answer',
+    'Make the dissent the product',
+    'Ship the ledger before the dossier',
+    'Price it by the question, not by the hour',
+    'Hand over the transcript and nothing else',
+    'Start from what it must never become',
+  ];
+  // Unevenly, the way a real search clusters: most of it lands in one or two
+  // places and the rest is a tail. An even split would draw four bars of the
+  // same length and say nothing.
+  const List<int> weights = <int>[0, 0, 0, 0, 1, 1, 1, 2, 2, 3];
+  const List<int> keptPerRound = <int>[31, 19, 7, 0];
+
+  final List<Direction> directions = <Direction>[];
+  final List<Rating> ratings = <Rating>[];
+  final List<RoundRecord> rounds = <RoundRecord>[];
+  final List<ModelCall> calls = <ModelCall>[];
+  int n = 0;
+
+  for (int r = 1; r <= keptPerRound.length; r++) {
+    final List<String> kept = <String>[];
+    for (int i = 0; i < keptPerRound[r - 1]; i++) {
+      n++;
+      final String id = 'd-${n.toString().padLeft(4, '0')}';
+      final (String, String) cluster = clusters[weights[i % weights.length]];
+      directions.add(
+        Direction(
+          id: id,
+          clusterId: cluster.$1,
+          clusterName: cluster.$2,
+          ambition: Ambition.values[i % Ambition.values.length],
+          title: titles[(n * 7) % titles.length],
+          statement:
+              'Treat the idea as though this were the only thing it '
+              'had to get right.',
+          mechanism:
+              'Concretely, the smallest version of it ships first and '
+              'everything else follows from what that teaches.',
+          proposedBy: 'prospector#$r.${i + 1}',
+          round: r,
+          angleId: angles[i % angles.length],
+          trace: const TraceLink(
+            answerModuleId: 'raw-idea',
+            quote: 'the idea as the client first said it',
+          ),
+        ),
+      );
+      kept.add(id);
+      for (final RatingDimension d in ratingDimensions) {
+        ratings.add(
+          Rating(
+            directionId: id,
+            dimensionId: d.id,
+            verdict: d.vocabulary.rungs[d.vocabulary.rungs.length ~/ 2],
+            vocabularyId: d.vocabulary.id,
+            ratedBy: 'assessor#$r.${i + 1}',
+            context: RatingContext.forDirection(
+              directions.last,
+              d,
+              briefRestatement: base.interview.brief.restatement,
+            ),
+            because: 'Judged on what is written, not on who wrote it.',
+          ),
+        );
+      }
+    }
+    for (int c = 0; c < 40 + keptPerRound[r - 1] * 13; c++) {
+      calls.add(
+        ModelCall(
+          at: at((r - 1) * 45 + 1),
+          purpose: 'propose',
+          by: 'prospector#$r.1',
+          promptChars: 9000,
+          replyChars: 2400,
+          tokensIn: 4,
+          tokensOut: 600,
+          cacheCreationTokens: 1800,
+          cacheReadTokens: 400,
+        ),
+      );
+    }
+    rounds.add(
+      RoundRecord(
+        number: r,
+        angleSet: angles,
+        returns: <AngleReturn>[
+          for (int a = 0; a < angles.length; a++)
+            AngleReturn(
+              angleId: angles[a],
+              by: 'prospector#$r.${a + 1}',
+              proposedIds: List<String>.filled(12, 'p'),
+              keptIds: kept,
+              exhausted: r == 4,
+            ),
+        ],
+        rejections: <DedupRejection>[
+          for (int d = 0; d < 48 - keptPerRound[r - 1]; d++)
+            const DedupRejection(
+              candidateTitle: 'The same idea from another side',
+              candidateSubstance: 'substance',
+              againstDirectionId: 'd-0001',
+              ruleId: 'jaccard-substance-v1@0.62',
+              similarity: 0.81,
+            ),
+        ],
+        refusals: const <Refusal>[
+          Refusal(
+            candidateTitle: 'A direction with nowhere to come from',
+            reason: 'Traced to neither an interview answer nor a named gap.',
+            kind: 'unsourced',
+          ),
+        ],
+        newDirectionIds: kept,
+        gapsNamed: r == 1
+            ? const <String>['t-1', 't-2', 't-3']
+            : const <String>[],
+        startedAt: at((r - 1) * 45),
+        endedAt: at(r * 45 - 5),
+      ),
+    );
+  }
+
+  return base.copyWith(
+    directions: directions,
+    ratings: ratings,
+    rounds: rounds,
+    ledger: CoverageLedger(
+      territories: <Territory>[
+        for (int i = 0; i < 7; i++)
+          Territory(
+            id: 'e-$i',
+            name: 'Ground the council entered',
+            description: 'Walked in round one.',
+            status: TerritoryStatus.explored,
+            firstWrittenInRound: 0,
+          ),
+        for (int i = 0; i < 4; i++)
+          Territory(
+            id: 'l-$i',
+            name: 'Ground deliberately left',
+            description: 'Put out of bounds in the interview.',
+            status: TerritoryStatus.dropped,
+            firstWrittenInRound: 0,
+            reason: 'The client ruled it out.',
+          ),
+        for (int i = 0; i < 6; i++)
+          Territory(
+            id: 'o-$i',
+            name: 'Ground nobody has reached',
+            description: 'Still open.',
+            status: TerritoryStatus.gap,
+            firstWrittenInRound: 0,
+          ),
+      ],
+    ),
+    manifest: RunManifest(
+      sessionId: base.manifest.sessionId,
+      templateId: base.manifest.templateId,
+      tier: base.manifest.tier,
+      transport: 'cli',
+      startedAt: at(0),
+      calls: calls,
+    ),
   );
 }

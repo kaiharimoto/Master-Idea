@@ -188,6 +188,154 @@ void main() {
     );
   });
 
+  group('the cartographer describes the ground before it is searched', () {
+    test('the map exists before the first angle is seated', () {
+      for (final HarnessTemplate t in harnessTemplates) {
+        expect(
+          CouncilRun.mapsAfterRound(1, t),
+          isTrue,
+          reason:
+              'A tier whose barrier is three ran its first two rounds with no '
+              'map, so every direction found in them could cite nothing but '
+              'an interview answer — and two sharing an answer must each name '
+              'a gap of their own, which no mapless round can give them. The '
+              'run accepted them and the suite rejected them, with the calls '
+              'already paid for.',
+        );
+      }
+    });
+
+    test('an assize names gaps in its first round', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      ).deliberate(referenceSession(templateId: 'assize'));
+
+      expect(
+        done.rounds.first.gapsNamed,
+        isNotEmpty,
+        reason:
+            'The map existing from round two onward is the whole point of '
+            'drawing it at round one.',
+      );
+    });
+
+    test('the extra seat costs exactly one call and ends nothing', () async {
+      final ScriptedCouncil council = ScriptedCouncil();
+      final Session done = await CouncilRun(
+        transport: council,
+        clock: FakeClock(),
+      ).deliberate(referenceSession(templateId: 'assize'));
+
+      final int mapped = done.manifest.calls
+          .where((ModelCall c) => c.purpose == 'map')
+          .length;
+      final int shouldMap =
+          1 +
+          done.rounds
+              .where(
+                (RoundRecord r) =>
+                    CouncilRun.mapsAfterRound(r.number, done.template),
+              )
+              .length;
+
+      expect(
+        mapped,
+        shouldMap,
+        reason:
+            'The opening map plus one per barrier. A change to when a seat '
+            'sits must show up in the call count rather than be inferred from '
+            'the schedule that was meant to produce it.',
+      );
+      expect(
+        done.manifest.dryness,
+        isNotNull,
+        reason:
+            'Filling one more seat before a round closes must not reach the '
+            'only decision that can end a run.',
+      );
+    });
+  });
+
+  group('a hold is the client waiting, never the council stopping', () {
+    test(
+      'nothing new is sent while held, and the run continues whole after',
+      () async {
+        late final CouncilRun run;
+        final ScriptedCouncil council = ScriptedCouncil(
+          onCall: (int n) {
+            if (n == 2) run.hold();
+          },
+        );
+        final FakeClock clock = FakeClock();
+        run = CouncilRun(transport: council, clock: clock);
+        final Future<Session> finishing = run.deliberate(referenceSession());
+
+        // Let everything that can run without the council, run.
+        for (int i = 0; i < 20; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(run.isHeld, isTrue);
+        expect(
+          council.calls,
+          2,
+          reason:
+              'The call that placed the hold and the one before it were '
+              'already in flight; every angle behind them must wait at the '
+              'gate rather than reach the transport.',
+        );
+
+        run.release();
+        final Session done = await finishing;
+
+        final ScriptedCouncil unheld = ScriptedCouncil();
+        await CouncilRun(
+          transport: unheld,
+          clock: FakeClock(),
+        ).deliberate(referenceSession());
+        expect(
+          council.calls,
+          unheld.calls,
+          reason:
+              'A hold defers the round without cutting it: the same search '
+              'is made, in full, once released — nothing lost and nothing '
+              'repeated.',
+        );
+        expect(done.manifest.dryness, isNotNull);
+        expect(done.manifest.holds, hasLength(1));
+        expect(
+          done.manifest.councilTime,
+          lessThan(done.manifest.wallClock),
+          reason:
+              'A sitting held overnight did not deliberate overnight, and a '
+              'manifest that said so would make the tier expectation '
+              'meaningless.',
+        );
+        expect(
+          InvariantSuite.run(done).findings,
+          isEmpty,
+          reason:
+              'A hold overlapping a deciding round is not the provider '
+              'silencing the council, and must not read as one.',
+        );
+      },
+    );
+
+    test('holding and releasing a run that is not held is harmless', () {
+      final CouncilRun run = CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      );
+      run.release();
+      expect(run.isHeld, isFalse);
+      run.hold();
+      run.hold();
+      expect(run.isHeld, isTrue);
+      run.release();
+      expect(run.isHeld, isFalse);
+    });
+  });
+
   group('the record a run leaves', () {
     test('every model call is accounted for in the manifest', () async {
       final ScriptedCouncil council = ScriptedCouncil();
@@ -288,6 +436,226 @@ void main() {
         (Direction d) => d.title == 'Direction the-obvious-one',
       );
       expect(convergent, hasLength(1));
+    });
+  });
+
+  group('what an interrupted run leaves behind', () {
+    test('every closed round reaches the barrier callback', () async {
+      final List<int> stored = <int>[];
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+        onBarrier: (Session s) async => stored.add(s.rounds.length),
+      ).deliberate(referenceSession());
+
+      expect(
+        stored,
+        <int>[0, 1, 2, 3, 4, 4],
+        reason:
+            'A round is stored when it closes, and the dryness decision once '
+            'more at the end — a run saved only when it finishes is a run '
+            'that loses six hours to a power cut. The leading zero is the '
+            'opening map, stored before any angle is seated: a sitting killed '
+            'during its first round would otherwise pay the cartographer '
+            'again on the way back.',
+      );
+      expect(done.rounds, hasLength(4));
+    });
+
+    test('a stop ends the run and keeps what closed before it', () async {
+      final List<Session> stored = <Session>[];
+      final CouncilRun run = CouncilRun(
+        // Late enough that a round has closed, so there is something to keep.
+        transport: ScriptedCouncil(stopOnCall: 100),
+        clock: FakeClock(),
+        onBarrier: (Session s) async => stored.add(s),
+      );
+
+      await expectLater(
+        run.deliberate(referenceSession()),
+        throwsA(isA<CouncilStopped>()),
+        reason:
+            'A stop is the client, not the provider. Waiting it out would '
+            'put the same turn back on screen forever.',
+      );
+      expect(stored, isNotEmpty);
+      expect(run.sessionSoFar!.rounds, isNotEmpty);
+      expect(
+        run.sessionSoFar!.manifest.dryness,
+        isNull,
+        reason: 'A sitting that was stopped has emphatically not run dry.',
+      );
+    });
+
+    test('a failure that is not a limit ends the run at once', () async {
+      final CouncilRun run = CouncilRun(
+        transport: ScriptedCouncil(failOnCall: 2),
+        clock: FakeClock(),
+      );
+
+      await expectLater(
+        run.deliberate(referenceSession()),
+        throwsA(isA<CouncilUnavailable>()),
+        reason:
+            'Not logged in does not lift by waiting. A run that waits it out '
+            'loses every search and then records itself as having gone dry.',
+      );
+      expect(
+        run.sessionSoFar!.rounds,
+        isEmpty,
+        reason:
+            'The failure landed inside the first round, and a round that '
+            'never closed is not a round: what it found is lost with it, '
+            'which is why the sitting resumes from the barrier it reached.',
+      );
+      expect(
+        run.sessionSoFar!.ledger.territories,
+        isNotEmpty,
+        reason:
+            'The opening map was drawn and paid for before the failure. '
+            'Losing it would make the resumed sitting buy the same map twice.',
+      );
+    });
+
+    test('silence already on the record still counts', () async {
+      // A session as an interruption leaves it: one round that found
+      // something, one that found nothing, and no dryness decision — which is
+      // exactly what is on disk when a sitting is stopped or fails after a
+      // quiet round.
+      final Session ran = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+      final Session interrupted = ran.copyWith(
+        rounds: ran.rounds.take(2).toList(),
+        manifest: RunManifest(
+          sessionId: ran.id,
+          templateId: ran.manifest.templateId,
+          tier: ran.manifest.tier,
+          transport: 'cli',
+          startedAt: ran.manifest.startedAt,
+        ),
+      );
+      expect(interrupted.rounds.last.returnedSomethingNew, isFalse);
+
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(interrupted);
+
+      expect(
+        done.manifest.dryness!.firstRound,
+        interrupted.rounds.last.number,
+        reason:
+            'Dryness is a property of the session, not of one process\'s '
+            'memory. A resumed run counting from zero re-searches a round '
+            'that was already searched and found empty, and charges for it.',
+      );
+    });
+
+    test('a resumed run never re-issues a direction id', () async {
+      final Session first = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      // Resumed from a session that already holds directions, the way the app
+      // resumes one that was interrupted.
+      final Session second =
+          await CouncilRun(
+            transport: ScriptedCouncil(silentFromRound: 3),
+            clock: FakeClock(),
+          ).deliberate(
+            first.copyWith(
+              manifest: RunManifest(
+                sessionId: first.id,
+                templateId: first.manifest.templateId,
+                tier: first.manifest.tier,
+                transport: 'cli',
+                startedAt: first.manifest.startedAt,
+              ),
+            ),
+          );
+
+      final List<String> ids = <String>[
+        for (final Direction d in second.directions) d.id,
+      ];
+      expect(
+        ids.toSet().length,
+        ids.length,
+        reason:
+            'The store writes a rating file once and never rewrites it, so a '
+            'reissued id loses the new direction\'s verdicts silently.',
+      );
+    });
+  });
+
+  group('a limit is waited out for as long as it takes', () {
+    test('more times than any retry budget would have allowed', () async {
+      final FakeClock clock = FakeClock();
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(pauseUntilCall: 6),
+        clock: clock,
+      ).deliberate(referenceSession());
+
+      expect(
+        clock.waited.length,
+        greaterThan(3),
+        reason:
+            'A limit always lifts. A run that gave up on the fourth wait '
+            'would record the provider\'s silence as the council\'s.',
+      );
+      expect(done.directions, isNotEmpty);
+      expect(done.manifest.pauses.first.source, 'stated');
+    });
+  });
+
+  group('what a round says about itself', () {
+    test('an exhausted angle is not a misread one', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(silentFromRound: 2),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      final RoundRecord quiet = done.rounds.firstWhere(
+        (RoundRecord r) => r.number == 2,
+      );
+      expect(
+        quiet.returns.every((AngleReturn r) => r.exhausted),
+        isTrue,
+        reason:
+            'mi-none is what takes a run to dryness, and a round of silence '
+            'that was really a round nobody could read is a run ended by a '
+            'parser.',
+      );
+      expect(
+        done.rounds.first.returns.every((AngleReturn r) => r.exhausted),
+        isFalse,
+      );
+    });
+
+    test('a direction that cites a gap fills it on the map', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      final List<Territory> filled = done.ledger.territories
+          .where((Territory t) => t.filledByDirectionIds.isNotEmpty)
+          .toList();
+      expect(
+        filled,
+        isNotEmpty,
+        reason:
+            'Without this the ledger reports "no direction cites this '
+            'territory" for every territory in every session ever produced, '
+            'which is the completeness claim reading as unearned.',
+      );
+      for (final Territory t in filled) {
+        for (final String id in t.filledByDirectionIds) {
+          expect(done.directionById(id), isNotNull);
+        }
+      }
     });
   });
 

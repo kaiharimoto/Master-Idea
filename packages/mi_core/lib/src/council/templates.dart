@@ -120,3 +120,17 @@ HarnessTemplate templateForTier(int tier) => harnessTemplates.firstWhere(
   (HarnessTemplate t) => t.tier == tier,
   orElse: () => throw ArgumentError.value(tier, 'tier', 'no template at tier'),
 );
+
+/// The same, or null.
+///
+/// For the places that only need to *print* a name: a session written by
+/// another build, or read out of files a person edited, can name something
+/// this catalog does not have — and a lookup that throws while a list is
+/// being built takes the whole screen down, including every other session on
+/// it. A run may still demand the strict one.
+HarnessTemplate? templateByIdOrNull(String id) {
+  for (final HarnessTemplate t in harnessTemplates) {
+    if (t.id == id) return t;
+  }
+  return null;
+}

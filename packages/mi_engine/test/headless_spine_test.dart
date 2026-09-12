@@ -35,8 +35,14 @@ void main() {
 
   tearDownAll(() => tmp.deleteSync(recursive: true));
 
-  Future<ProcessResult> mi(List<String> args) =>
-      Process.run('dart', <String>['run', 'bin/mi.dart', ...args]);
+  Future<ProcessResult> mi(
+    List<String> args, {
+    Map<String, String> environment = const <String, String>{},
+  }) => Process.run('dart', <String>[
+    'run',
+    'bin/mi.dart',
+    ...args,
+  ], environment: environment.isEmpty ? null : environment);
 
   test('a session goes from interview to pitch without an interface', () async {
     final File interview = File('${tmp.path}/interview.json')
@@ -136,5 +142,71 @@ void main() {
           'A run with no licence to settle anything stalls the first time it '
           'needs to, and there is nobody there to ask.',
     );
+  });
+
+  test('a run interrupted mid-sitting keeps every round that closed', () async {
+    final File interview = File('${tmp.path}/interrupted.json')
+      ..writeAsStringSync(jsonEncode(referenceInterview().toJson()));
+    final String dir = '${tmp.path}/interrupted';
+
+    final ProcessResult opened = await mi(<String>['new', dir, interview.path]);
+    expect(opened.exitCode, 0, reason: '${opened.stderr}');
+    final String id = Directory(dir)
+        .listSync()
+        .whereType<Directory>()
+        .single
+        .path
+        .split(Platform.pathSeparator)
+        .last;
+
+    // The council answers a first round and then fails for a reason no amount
+    // of waiting fixes.
+    final ProcessResult broke = await mi(
+      <String>['run', dir, id, '--claude', fake],
+      environment: <String, String>{'MI_FAKE_BROKEN_AFTER': '20'},
+    );
+
+    expect(
+      broke.exitCode,
+      75,
+      reason:
+          'A failure that is not a limit ends the sitting loudly. '
+          '${broke.stdout}${broke.stderr}',
+    );
+    expect(broke.stderr, contains('resumes from round'));
+    expect(
+      Directory('$dir/$id/rounds').listSync(),
+      isNotEmpty,
+      reason:
+          'A process that dies mid-run should lose the round it was in and '
+          'nothing else — which is only true if a closed round was written '
+          'when it closed.',
+    );
+    expect(
+      File('$dir/$id/.lock').existsSync(),
+      isFalse,
+      reason: 'A run that ended must not leave the session claimed.',
+    );
+  });
+
+  test('a stored session can be deleted from the command line', () async {
+    final File interview = File('${tmp.path}/doomed.json')
+      ..writeAsStringSync(jsonEncode(referenceInterview().toJson()));
+    final String dir = '${tmp.path}/doomed';
+    await mi(<String>['new', dir, interview.path]);
+    final String id = Directory(dir)
+        .listSync()
+        .whereType<Directory>()
+        .single
+        .path
+        .split(Platform.pathSeparator)
+        .last;
+
+    final ProcessResult removed = await mi(<String>['rm', dir, id]);
+    expect(removed.exitCode, 0, reason: '${removed.stderr}');
+    expect(Directory('$dir/$id').existsSync(), isFalse);
+
+    final ProcessResult again = await mi(<String>['rm', dir, id]);
+    expect(again.exitCode, 66, reason: 'Nothing there to remove.');
   });
 }

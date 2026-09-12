@@ -17,6 +17,10 @@ env:
   DEV_KEY_SHA256: '618b2260d0c48fb11b80e0046f41b9e749f13a989060207a14e9d7e9e62de4e4'
 
 jobs:
+  # A tagged milestone is held to the same bar as a rolling build, not a lower
+  # one. This job used to run two of the four packages and neither format
+  # gate, so the design system was never analysed on the path that produces the
+  # builds people keep.
   verify:
     name: Verify before publishing
     runs-on: ubuntu-latest
@@ -26,16 +30,51 @@ jobs:
         with:
           sdk: stable
       - working-directory: packages/mi_core
-        run: dart pub get && dart analyze && dart test
+        run: |
+          dart pub get
+          dart analyze
+          dart format --output=none --set-exit-if-changed .
+          dart test
       - working-directory: packages/mi_engine
-        run: dart pub get && dart analyze && dart test
+        run: |
+          dart pub get
+          dart analyze
+          dart format --output=none --set-exit-if-changed .
+          dart test
 
-  android:
-    name: Android
-    needs: verify
+  verify-clients:
+    name: Verify the clients
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - working-directory: packages/mi_design
+        run: |
+          flutter pub get
+          flutter analyze
+          dart format --output=none --set-exit-if-changed .
+          flutter test
+      - working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          dart format --output=none --set-exit-if-changed .
+          flutter test
+
+  android:
+    name: Android
+    needs: [verify, verify-clients]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Work out the build number
+        run: .github/build-number.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -48,7 +87,7 @@ jobs:
 
       - name: Stamp the build number into the version
         run: |
-          sed -i "s/^version: .*/version: 0.1.0+${{ github.run_number }}/" app/pubspec.yaml
+          sed -i "s/^version: .*/version: ${{ env.MI_VERSION }}+${{ env.MI_BUILD }}/" app/pubspec.yaml
           grep '^version:' app/pubspec.yaml
 
       # Signed with the committed dev key, exactly like the rolling builds, so
@@ -62,10 +101,10 @@ jobs:
           flutter analyze
           flutter test
           flutter build apk --release \
-            --dart-define=MI_BUILD=${{ github.run_number }} \
+            --dart-define=MI_BUILD=${{ env.MI_BUILD }} --dart-define=MI_VERSION=${{ env.MI_VERSION }} \
             --dart-define=MI_SHA=${{ github.sha }}
           flutter build appbundle --release \
-            --dart-define=MI_BUILD=${{ github.run_number }} \
+            --dart-define=MI_BUILD=${{ env.MI_BUILD }} --dart-define=MI_VERSION=${{ env.MI_VERSION }} \
             --dart-define=MI_SHA=${{ github.sha }}
 
       - name: Verify the APK is signed with the dev key
@@ -86,7 +125,7 @@ jobs:
           mkdir -p out
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
           cp app/build/app/outputs/flutter-apk/app-release.apk \
-             "out/MasterIdea-${{ github.run_number }}-$SHA.apk"
+             "out/MasterIdea-${{ env.MI_BUILD }}-$SHA.apk"
           cp app/build/app/outputs/bundle/release/*.aab out/
 
       - uses: actions/upload-artifact@v4
@@ -96,10 +135,15 @@ jobs:
 
   windows:
     name: Windows
-    needs: verify
+    needs: [verify, verify-clients]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Work out the build number
+        shell: bash
+        run: .github/build-number.sh
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -111,7 +155,7 @@ jobs:
         run: |
           $p = "app/pubspec.yaml"
           (Get-Content $p) -replace '^version: .*$', `
-            'version: 0.1.0+${{ github.run_number }}' | Set-Content $p
+            'version: ${{ env.MI_VERSION }}+${{ env.MI_BUILD }}' | Set-Content $p
 
       - name: Build
         working-directory: app
@@ -120,7 +164,7 @@ jobs:
           flutter analyze
           flutter test
           flutter build windows --release `
-            --dart-define=MI_BUILD=${{ github.run_number }} `
+            --dart-define=MI_BUILD=${{ env.MI_BUILD }} --dart-define=MI_VERSION=${{ env.MI_VERSION }} `
             --dart-define=MI_SHA=${{ github.sha }}
 
       - name: Ensure Inno Setup
@@ -139,13 +183,13 @@ jobs:
           $sha = "${{ github.sha }}".Substring(0,7)
           New-Item -ItemType Directory -Force -Path out | Out-Null
           & "$env:ISCC" `
-            "/DAppVersion=0.1.0.${{ github.run_number }}" `
+            "/DAppVersion=${{ env.MI_VERSION }}.${{ env.MI_BUILD }}" `
             "/DBuildDir=..\..\build\windows\x64\runner\Release" `
             "/DOutputDir=..\..\..\out" `
-            "/DOutputBase=MasterIdeaSetup-${{ github.run_number }}-$sha" `
+            "/DOutputBase=MasterIdeaSetup-${{ env.MI_BUILD }}-$sha" `
             "app\windows\installer\master_idea.iss"
           Compress-Archive -Path "app/build/windows/x64/runner/Release/*" `
-            -DestinationPath "out/MasterIdea-windows-x64-${{ github.run_number }}-$sha.zip"
+            -DestinationPath "out/MasterIdea-windows-x64-${{ env.MI_BUILD }}-$sha.zip"
 
       - uses: actions/upload-artifact@v4
         with:

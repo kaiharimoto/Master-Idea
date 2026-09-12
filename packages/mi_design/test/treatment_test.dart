@@ -9,7 +9,9 @@ import 'package:mi_design/mi_design.dart';
 /// reads it skips rather than failing — a cross-repository assertion that goes
 /// red on every CI run is a test nobody keeps.
 File? mp(String name) {
-  final File f = File('../../../Master-Prompt/packages/mp_design/lib/src/$name');
+  final File f = File(
+    '../../../Master-Prompt/packages/mp_design/lib/src/$name',
+  );
   return f.existsSync() ? f : null;
 }
 
@@ -46,19 +48,27 @@ void main() {
       // second place that reached for oxblood would make the first one mean
       // nothing, so this reads the source and names every class that touches
       // it.
-      final String source = File('lib/src/widgets.dart').readAsStringSync();
-      final List<String> chunks = source.split(
-        RegExp(r'^class ', multiLine: true),
-      );
+      // Every file that draws, not just the one that did when this was
+      // written: charts arrived later, and a rule that only watches the file
+      // it was born in stops being a rule the moment a second one appears.
       final List<String> reaching = <String>[
-        for (final String chunk in chunks.skip(1))
-          if (chunk.contains('c.verdict'))
-            chunk.split(RegExp(r'[ ({]')).first,
+        for (final FileSystemEntity f in Directory('lib/src').listSync())
+          if (f is File && f.path.endsWith('.dart'))
+            for (final String chunk
+                in f
+                    .readAsStringSync()
+                    .split(RegExp(r'^class ', multiLine: true))
+                    .skip(1))
+              if (chunk.contains('c.verdict'))
+                chunk.split(RegExp(r'[ ({]')).first,
       ];
-      expect(reaching, <String>['MiVerdict'],
-          reason:
-              'A council\'s whole output is judgement. It stops being findable '
-              'the moment anything else is that colour.');
+      expect(
+        reaching,
+        <String>['MiVerdict'],
+        reason:
+            'A council\'s whole output is judgement. It stops being findable '
+            'the moment anything else is that colour.',
+      );
     });
 
     test('Master Prompt has no such colour, and needs none', () {
@@ -68,27 +78,36 @@ void main() {
         return;
       }
       final String theirs = file.readAsStringSync();
-      expect(theirs.contains('verdict'), isFalse,
-          reason:
-              'The addition belongs to the half that produces verdicts. If it '
-              'ever appears there too, these two files have started being '
-              'edited as one and the family resemblance is now a coincidence.');
+      expect(
+        theirs.contains('verdict'),
+        isFalse,
+        reason:
+            'The addition belongs to the half that produces verdicts. If it '
+            'ever appears there too, these two files have started being '
+            'edited as one and the family resemblance is now a coincidence.',
+      );
     });
 
     test('the Material theme is never handed it', () {
       for (final MiColors c in <MiColors>[MiColors.light, MiColors.dark]) {
         final ThemeData t = buildMiTheme(c, dark: c == MiColors.dark);
         expect(t.colorScheme.primary, isNot(c.verdict));
-        expect(t.colorScheme.error, isNot(c.verdict),
-            reason: 'A failure is not a judgement and must not look like one.');
+        expect(
+          t.colorScheme.error,
+          isNot(c.verdict),
+          reason: 'A failure is not a judgement and must not look like one.',
+        );
       }
     });
 
     test('a verdict is set at reading size', () {
-      expect(MiType.verdict.fontSize, MiType.body.fontSize,
-          reason:
-              'The colour carries it. Set larger, it would be the closest '
-              'thing this design has to a chart.');
+      expect(
+        MiType.verdict.fontSize,
+        MiType.body.fontSize,
+        reason:
+            'The colour carries it. Set larger, it would be the closest '
+            'thing this design has to a chart.',
+      );
     });
   });
 
@@ -102,11 +121,14 @@ void main() {
 
     test('are set in the vendored font, not whatever the platform has', () {
       final ThemeData t = buildMiTheme(MiColors.light, dark: false);
-      expect(t.textTheme.bodyMedium!.fontFamily, contains('mi_design'),
-          reason:
-              'An unqualified family resolves to nothing and falls through to '
-              'the platform sans, so the same screen would be set in Roboto on '
-              'Android and Segoe on Windows.');
+      expect(
+        t.textTheme.bodyMedium!.fontFamily,
+        contains('mi_design'),
+        reason:
+            'An unqualified family resolves to nothing and falls through to '
+            'the platform sans, so the same screen would be set in Roboto on '
+            'Android and Segoe on Windows.',
+      );
     });
   });
 
@@ -145,11 +167,14 @@ void main() {
         ),
       ),
     );
-    expect(find.text('territory nobody has entered'), findsNothing,
-        reason:
-            'AnimatedCrossFade builds both branches, so a disclosure built '
-            'with it announces its contents to a screen reader while looking '
-            'closed.');
+    expect(
+      find.text('territory nobody has entered'),
+      findsNothing,
+      reason:
+          'AnimatedCrossFade builds both branches, so a disclosure built '
+          'with it announces its contents to a screen reader while looking '
+          'closed.',
+    );
 
     await tester.tap(find.text('The full ledger'));
     await tester.pumpAndSettle();

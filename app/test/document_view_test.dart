@@ -47,10 +47,13 @@ void main() {
         ]),
       ),
     );
-    expect(tester.widget<MiVerdict>(find.byType(MiVerdict)).dissenting, isTrue,
-        reason:
-            'Dissent held rather than averaged away is the point of recording '
-            'it at all, so it has to be visibly a minority verdict.');
+    expect(
+      tester.widget<MiVerdict>(find.byType(MiVerdict)).dissenting,
+      isTrue,
+      reason:
+          'Dissent held rather than averaged away is the point of recording '
+          'it at all, so it has to be visibly a minority verdict.',
+    );
   });
 
   testWidgets('no numeral appears in a rendered verdict', (
@@ -59,15 +62,22 @@ void main() {
     await tester.pumpWidget(
       wrap(
         const MiDocument(<DocBlock>[
-          DocBlock(BlockKind.verdict, 'commanding — because', label: 'Ambition'),
+          DocBlock(
+            BlockKind.verdict,
+            'commanding — because',
+            label: 'Ambition',
+          ),
         ]),
       ),
     );
     final MiVerdict v = tester.widget<MiVerdict>(find.byType(MiVerdict));
-    expect(RegExp(r'[0-9]').hasMatch(v.verdict), isFalse,
-        reason:
-            'A number invites averaging, and averaging is how dissent '
-            'disappears.');
+    expect(
+      RegExp(r'[0-9]').hasMatch(v.verdict),
+      isFalse,
+      reason:
+          'A number invites averaging, and averaging is how dissent '
+          'disappears.',
+    );
   });
 
   testWidgets('a marked assumption is set apart without borrowing the accent', (
@@ -84,8 +94,11 @@ void main() {
         ]),
       ),
     );
-    expect(find.byType(MiVerdict), findsNothing,
-        reason: 'An assumption is not a judgement.');
+    expect(
+      find.byType(MiVerdict),
+      findsNothing,
+      reason: 'An assumption is not a judgement.',
+    );
     expect(find.textContaining('rather wait'), findsOneWidget);
   });
 }

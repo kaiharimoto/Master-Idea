@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../assembly/integration.dart';
 import '../council/angles.dart';
 import '../council/dimensions.dart';
@@ -25,8 +27,9 @@ import 'run_clock.dart';
 class RunEvent {
   const RunEvent(this.kind, this.detail, {this.round = 0});
 
-  /// `round-opened`, `angle-returned`, `direction-kept`, `direction-refused`,
-  /// `rated`, `territory`, `paused`, `dropped`, `round-closed`, `dry`.
+  /// `round-opened`, `turn`, `angle-returned`, `angle-exhausted`,
+  /// `direction-kept`, `direction-refused`, `rated`, `judged`, `territory`,
+  /// `paused`, `held`, `released`, `round-closed`, `dry`.
   final String kind;
   final String detail;
   final int round;
@@ -55,23 +58,130 @@ class CouncilRun {
     required this.transport,
     this.clock = const SystemClock(),
     this.onEvent,
-    this.retriesPerCall = 3,
+    this.onBarrier,
   });
 
   final CouncilTransport transport;
   final RunClock clock;
   final void Function(RunEvent)? onEvent;
 
-  /// How many times one call is retried after a provider pause before the run
-  /// gives up on it and logs the loss as a dropped territory. Not a run-ending
-  /// condition: the round continues without that angle, and the ledger says so.
-  final int retriesPerCall;
+  /// How many directions one angle is asked for in a round.
+  static const int wantedPerAngle = 4;
+
+  /// What judging one kept direction costs in calls: one challenge, then a
+  /// rating and an invited dissent on every dimension. Published so a client
+  /// can say what a round will cost in the same arithmetic the run uses,
+  /// rather than in a figure that drifts from it.
+  static int get callsPerDirection => 1 + 2 * ratingDimensions.length;
+
+  /// The most calls one round can make at [breadth]: every angle proposing
+  /// its full quota and every proposal kept. An upper bound, not a plan —
+  /// duplicates are refused before they are judged, and the later rounds of a
+  /// real run keep far fewer than they propose.
+  static int mostCallsInRound(int breadth) =>
+      breadth * (1 + wantedPerAngle * callsPerDirection) + 1;
+
+  /// Whether the cartographer redraws the map at the end of [round].
+  ///
+  /// Round one included, then every [HarnessTemplate.roundsPerBarrier] rounds
+  /// after it. A tier whose barrier is three otherwise ran its first two
+  /// rounds against nothing but the map drawn before the sitting opened.
+  ///
+  /// **Not a stop condition and not a barrier of its own.** The round closes
+  /// where it closed; this decides only whether one more seat is filled
+  /// before it does.
+  static bool mapsAfterRound(int round, HarnessTemplate t) =>
+      round == 1 || round % t.roundsPerBarrier == 0;
+
+  /// The round number the opening map is written in.
+  ///
+  /// **Zero, because it is drawn before any round has run.** A gap may only
+  /// be cited by a direction from a *later* round than the one that wrote it,
+  /// so a map written in round one could never source a round-one direction —
+  /// and at an assize round one puts forward forty-eight directions against
+  /// sixteen interview answers. There is no way to tell them apart without a
+  /// map, whatever the council does, so the map has to exist before the first
+  /// angle is seated. Decision 0005 recorded that as a bound on first-round
+  /// breadth; it was a missing seat.
+  static const int openingMapRound = 0;
+
+  /// Called with the session as it stands every time a round closes, and once
+  /// more when the manifest is closed.
+  ///
+  /// **Awaited**, so a barrier is not passed until the round behind it is
+  /// stored. This is the whole of what makes an interrupted sitting resumable
+  /// rather than merely restartable: without it a run killed at hour four
+  /// leaves nothing on disk and begins again at round one, however carefully
+  /// [deliberate] resumes from what it is given.
+  final Future<void> Function(Session)? onBarrier;
+
+  /// The shortest a paused call will wait before trying again.
+  ///
+  /// A provider that reports a limit without saying when it lifts, or says it
+  /// lifts in the past, must not become a loop that asks as fast as the
+  /// network allows.
+  static const Duration pauseFloor = Duration(seconds: 30);
 
   final Map<String, int> _seats = <String, int>{};
   int _directionSeq = 0;
+  int _assumptionSeq = 0;
 
   Session? _s;
   Session get _session => _s!;
+
+  Completer<void>? _held;
+  DateTime? _heldSince;
+
+  final Map<String, int> _inFlight = <String, int>{};
+
+  /// Turns that have gone to the transport and not yet come back, by purpose.
+  /// What the council is doing at this instant, for a screen that must not
+  /// claim to know more than that.
+  Map<String, int> get inFlight => Map<String, int>.unmodifiable(_inFlight);
+
+  /// True while the client has the sitting held.
+  bool get isHeld => _held != null;
+
+  /// Hold the sitting. Nothing new goes to the council until [release];
+  /// whatever is already in flight finishes and is kept, because a turn
+  /// already paid for is not made cheaper by throwing its reply away.
+  ///
+  /// **Not a stop condition.** A hold ends nothing, narrows nothing and is
+  /// invisible to the dryness decision: the round it interrupts completes,
+  /// with every angle it seated, once released. It is recorded in the
+  /// manifest as time the council was not deliberating, the way a provider
+  /// limit is, so a sitting held overnight is not reported as an overnight
+  /// deliberation.
+  void hold() {
+    if (_held != null) return;
+    _held = Completer<void>();
+    _heldSince = clock.now();
+    _emit('held', 'nothing new goes to the council until released');
+  }
+
+  /// Let a held sitting continue from exactly where it was.
+  void release() {
+    final Completer<void>? held = _held;
+    if (held == null) return;
+    final DateTime from = _heldSince!;
+    _held = null;
+    _heldSince = null;
+    final DateTime until = clock.now();
+    if (_s != null) {
+      _s = _session.copyWith(
+        manifest: _session.manifest.held(Hold(from: from, until: until)),
+      );
+    }
+    _emit('released', 'held ${until.difference(from).inMinutes} min');
+    held.complete();
+  }
+
+  /// The session as the run has it, including a round in progress.
+  ///
+  /// Read by a caller that catches [CouncilStopped] or [CouncilUnavailable]:
+  /// what was closed before the interruption is worth storing, and is what the
+  /// next sitting resumes from.
+  Session? get sessionSoFar => _s;
 
   void _emit(String kind, String detail, {int round = 0}) =>
       onEvent?.call(RunEvent(kind, detail, round: round));
@@ -90,10 +200,37 @@ class CouncilRun {
   /// than starting the deliberation again.
   Future<Session> deliberate(Session session) async {
     _s = session;
+    // Seeded from what is already stored, never from zero. A resumed run that
+    // starts numbering at d-0001 again mints an id the session already holds,
+    // and the store — which writes a rating file once and never rewrites it —
+    // then drops the new direction's verdicts silently.
+    _directionSeq = _highestOrdinal(<String>[
+      for (final Direction d in session.directions) d.id,
+    ], 'd-');
+    _assumptionSeq = _highestOrdinal(<String>[
+      for (final Assumption a in session.assumptions) a.id,
+    ], 'a-');
     final HarnessTemplate template = session.template;
     final DomainProfile profile = profileById(session.interview.profileId);
     int round = session.rounds.length + 1;
+    // Silence already on the record counts. Dryness is a property of the
+    // session — two consecutive rounds that returned nothing new — and not of
+    // one process's memory: a run resumed after an interruption that started
+    // counting from zero would search a round that had already been searched
+    // and found empty, and charge for it.
     int quiet = 0;
+    for (final RoundRecord r in session.rounds.reversed) {
+      if (r.returnedSomethingNew) break;
+      quiet++;
+    }
+
+    // The territory is described before anyone searches it. The cartographer
+    // works from the brief and the medium, which is all it needs — the map
+    // says what ground the idea covers, not what the council has found on it.
+    if (_session.rounds.isEmpty) {
+      await _mapTerritory(round: openingMapRound, profile: profile);
+      await onBarrier?.call(_session);
+    }
 
     while (true) {
       final List<String> angleSet = angleSetFor(
@@ -121,7 +258,7 @@ class CouncilRun {
       ]);
 
       final List<String> gapsNamed = <String>[];
-      if (round % template.roundsPerBarrier == 0) {
+      if (mapsAfterRound(round, template)) {
         gapsNamed.addAll(await _mapTerritory(round: round, profile: profile));
       }
 
@@ -148,6 +285,7 @@ class CouncilRun {
             : '${newIds.length} kept, ${rejections.length} already known',
         round: round,
       );
+      await onBarrier?.call(_session);
 
       quiet = newIds.isEmpty ? quiet + 1 : 0;
 
@@ -179,6 +317,7 @@ class CouncilRun {
               : 'dry at ${_session.directions.length} directions',
           round: round,
         );
+        await onBarrier?.call(_session);
         return _session;
       }
 
@@ -204,36 +343,25 @@ class CouncilRun {
       angle: angle,
       openGaps: _session.ledger.gaps,
       answers: _session.interview.answers,
-      wanted: 4,
+      wanted: wantedPerAngle,
     );
 
-    final CouncilReply? reply = await _ask(
+    final CouncilReply reply = await _ask(
       CouncilTurn(
         agent: prospector,
         purpose: 'propose',
         prompt: prompt,
         conversation: 'propose-$round-$angleId',
       ),
-      onLost: (String why) {
-        _dropTerritory(
-          id: 'drop-$angleId-r$round',
-          name: '${angle.name}, round $round',
-          description: angle.modality,
-          reason: 'The provider would not complete this search: $why',
-          round: round,
-        );
-      },
     );
-    if (reply == null) {
-      return AngleReturn(
-        angleId: angleId,
-        by: prospector.id,
-        proposedIds: const <String>[],
-        keptIds: const <String>[],
-      );
-    }
 
     final ParsedReply parsed = CouncilReplyParser.parse(reply.text);
+    // The single most consequential thing a seat can say, and it is a
+    // standalone marker rather than a block: this angle is exhausted. Read
+    // here so that an angle which said so and an angle whose reply nobody
+    // could parse are distinguishable on the record — dryness means the
+    // first, and a run ended by the second is a run ended by a parser.
+    final bool exhausted = parsed.of('mi-none').isNotEmpty;
     final List<String> proposedTitles = <String>[];
     final List<Direction> kept = <Direction>[];
 
@@ -264,8 +392,16 @@ class CouncilRun {
         continue;
       }
       final Direction d = _direction(b, round, angleId, prospector.id);
+      // Still synchronous. A cited gap is filled by the direction that cites
+      // it, or the ledger's completeness claim reads "no direction cites this
+      // territory" for every territory in every session ever produced.
+      final String? gap = d.trace.gapId;
+      final Territory? cited = gap == null ? null : _session.ledger.byId(gap);
       _s = _session.copyWith(
         directions: <Direction>[..._session.directions, d],
+        ledger: cited == null
+            ? _session.ledger
+            : _session.ledger.replace(cited.fill(d.id)),
       );
       kept.add(d);
       newIds.add(d.id);
@@ -273,6 +409,28 @@ class CouncilRun {
     }
 
     _recordAssumptions(parsed, round, kept);
+
+    // One event per angle, whatever it said, so a watcher can count the
+    // angles back against the breadth. The three cases stay distinguishable
+    // on the record: an angle that said it was exhausted, an angle whose
+    // reply nobody could read, and an angle that proposed — dryness means the
+    // first, and a run ended by the second is a run ended by a parser.
+    if (exhausted) {
+      _emit('angle-exhausted', angle.name, round: round);
+    } else if (parsed.foundNothing) {
+      _emit(
+        'angle-returned',
+        '${angle.name}: nothing readable came back',
+        round: round,
+      );
+    } else {
+      _emit(
+        'angle-returned',
+        '${angle.name}: ${kept.length} kept of ${proposedTitles.length} '
+            'proposed',
+        round: round,
+      );
+    }
 
     // Pipelined: this angle's directions are challenged and rated now, while
     // the other angles are still searching.
@@ -285,6 +443,8 @@ class CouncilRun {
       by: prospector.id,
       proposedIds: proposedTitles,
       keptIds: <String>[for (final Direction d in kept) d.id],
+      exhausted: exhausted,
+      unread: parsed.unread,
     );
   }
 
@@ -386,7 +546,7 @@ class CouncilRun {
         assumptions: <Assumption>[
           ..._session.assumptions,
           Assumption(
-            id: 'a-${_session.assumptions.length + 1}',
+            id: 'a-${++_assumptionSeq}',
             round: round,
             made: b.get('made'),
             because: b.get('because'),
@@ -409,7 +569,7 @@ class CouncilRun {
   /// rater sees.
   Future<void> _judge(Direction d, int round) async {
     final AgentInstance challenger = _seat('challenger', round);
-    final CouncilReply? cr = await _ask(
+    final CouncilReply cr = await _ask(
       CouncilTurn(
         agent: challenger,
         purpose: 'challenge',
@@ -417,22 +577,20 @@ class CouncilRun {
         conversation: 'challenge-${d.id}',
       ),
     );
-    if (cr != null) {
-      final ParsedReply p = CouncilReplyParser.parse(cr.text);
-      for (final CouncilBlock b in p.of('mi-challenge')) {
-        if (!b.has('attack')) continue;
-        _s = _session.copyWith(
-          challenges: <Challenge>[
-            ..._session.challenges,
-            Challenge(
-              directionId: d.id,
-              by: challenger.id,
-              attack: b.get('attack'),
-              answered: b.get('fatal') != 'yes',
-            ),
-          ],
-        );
-      }
+    final ParsedReply challenged = CouncilReplyParser.parse(cr.text);
+    for (final CouncilBlock b in challenged.of('mi-challenge')) {
+      if (!b.has('attack')) continue;
+      _s = _session.copyWith(
+        challenges: <Challenge>[
+          ..._session.challenges,
+          Challenge(
+            directionId: d.id,
+            by: challenger.id,
+            attack: b.get('attack'),
+            answered: b.get('fatal') != 'yes',
+          ),
+        ],
+      );
     }
 
     for (final RatingDimension dim in ratingDimensions) {
@@ -442,7 +600,7 @@ class CouncilRun {
         dim,
         briefRestatement: _session.interview.brief.restatement,
       );
-      final CouncilReply? rr = await _ask(
+      final CouncilReply rr = await _ask(
         CouncilTurn(
           agent: assessor,
           purpose: 'rate',
@@ -450,7 +608,6 @@ class CouncilRun {
           conversation: 'rate-${d.id}-${dim.id}',
         ),
       );
-      if (rr == null) continue;
       final ParsedReply p = CouncilReplyParser.parse(rr.text);
       final List<CouncilBlock> blocks = p.of('mi-rating');
       if (blocks.isEmpty) continue;
@@ -484,6 +641,7 @@ class CouncilRun {
       );
       _emit('rated', '${d.title}: ${dim.name} — $verdict', round: round);
     }
+    _emit('judged', d.title, round: round);
   }
 
   Future<List<Dissent>> _inviteDissent({
@@ -495,7 +653,7 @@ class CouncilRun {
     required int round,
   }) async {
     final AgentInstance dissenter = _seat('dissenter', round);
-    final CouncilReply? reply = await _ask(
+    final CouncilReply reply = await _ask(
       CouncilTurn(
         agent: dissenter,
         purpose: 'dissent',
@@ -503,7 +661,6 @@ class CouncilRun {
         conversation: 'dissent-${d.id}-${dim.id}',
       ),
     );
-    if (reply == null) return const <Dissent>[];
     final ParsedReply p = CouncilReplyParser.parse(reply.text);
     return <Dissent>[
       for (final CouncilBlock b in p.of('mi-dissent'))
@@ -523,7 +680,7 @@ class CouncilRun {
     required DomainProfile profile,
   }) async {
     final AgentInstance cartographer = _seat('cartographer', round);
-    final CouncilReply? reply = await _ask(
+    final CouncilReply reply = await _ask(
       CouncilTurn(
         agent: cartographer,
         purpose: 'map',
@@ -536,7 +693,6 @@ class CouncilRun {
         conversation: 'map-$round',
       ),
     );
-    if (reply == null) return const <String>[];
 
     final ParsedReply p = CouncilReplyParser.parse(reply.text);
     final List<String> gaps = <String>[];
@@ -554,17 +710,22 @@ class CouncilRun {
                 ? b.get('reason')
                 : 'Dropped without a stated reason at the round $round barrier.')
           : '';
+      final Territory? known = _session.ledger.byId(b.get('id'));
       final Territory t = Territory(
         id: b.get('id'),
         name: b.get('name'),
         description: b.get('description'),
         status: status,
-        firstWrittenInRound:
-            _session.ledger.byId(b.get('id'))?.firstWrittenInRound ?? round,
+        firstWrittenInRound: known?.firstWrittenInRound ?? round,
         reason: reason,
+        // Carried rather than rebuilt. The cartographer redraws the map from
+        // the directions it can see; the fills are the run's own record of
+        // which direction cited which territory, and a redraw that dropped
+        // them would erase the ledger's evidence one barrier at a time.
+        filledByDirectionIds: known?.filledByDirectionIds ?? const <String>[],
       );
       _s = _session.copyWith(
-        ledger: _session.ledger.byId(t.id) == null
+        ledger: known == null
             ? _session.ledger.add(t)
             : _session.ledger.replace(t),
       );
@@ -574,42 +735,41 @@ class CouncilRun {
     return gaps;
   }
 
-  void _dropTerritory({
-    required String id,
-    required String name,
-    required String description,
-    required String reason,
-    required int round,
-  }) {
-    _s = _session.copyWith(
-      ledger: _session.ledger.add(
-        Territory(
-          id: id,
-          name: name,
-          description: description,
-          status: TerritoryStatus.dropped,
-          firstWrittenInRound: round,
-          reason: reason,
-        ),
-      ),
-    );
-    _emit('dropped', '$name — $reason', round: round);
-  }
-
-  /// One call, with the provider's pauses waited out rather than mistaken for
-  /// silence.
+  /// One call, with the provider's pauses waited out and its failures raised.
   ///
-  /// A rate or session limit is logged as a pause, excluded from council time,
-  /// and retried. Only when the retries are spent does the call give up — and
-  /// giving up loses that search, which is logged as a dropped territory, and
-  /// never ends the run.
-  Future<CouncilReply?> _ask(
-    CouncilTurn turn, {
-    void Function(String why)? onLost,
-  }) async {
-    for (int attempt = 0; attempt <= retriesPerCall; attempt++) {
+  /// **A limit is waited out and retried, without a cap.** A limit always
+  /// lifts, and a run that gave up on the fourth wait would record the
+  /// provider's silence as the council's — which is the one mistake this whole
+  /// apparatus exists to prevent. Every wait is logged, excluded from council
+  /// time, and carries how its resume time was arrived at.
+  ///
+  /// **Anything else ends the run.** Not logged in, a model the CLI does not
+  /// know, a binary that is no longer there: none of those lift by waiting,
+  /// and treating them as pauses is how a sitting spends hours in silence,
+  /// loses every search, and declares itself dry with an empty dossier. The
+  /// exception reaches the caller, which stores the rounds already closed —
+  /// so the sitting resumes rather than restarting.
+  Future<CouncilReply> _ask(CouncilTurn turn) async {
+    while (true) {
+      // The hold gate. Checked before every call rather than once, because a
+      // turn retried after a provider pause must not slip past a hold placed
+      // during the wait.
+      while (_held != null) {
+        await _held!.future;
+      }
+      _inFlight[turn.purpose] = (_inFlight[turn.purpose] ?? 0) + 1;
       try {
-        final CouncilReply reply = await transport.ask(turn);
+        final CouncilReply reply;
+        try {
+          reply = await transport.ask(turn);
+        } finally {
+          final int left = (_inFlight[turn.purpose] ?? 1) - 1;
+          if (left <= 0) {
+            _inFlight.remove(turn.purpose);
+          } else {
+            _inFlight[turn.purpose] = left;
+          }
+        }
         _s = _session.copyWith(
           manifest: _session.manifest.record(
             ModelCall(
@@ -620,14 +780,31 @@ class CouncilRun {
               replyChars: reply.text.length,
               tokensIn: reply.tokensIn,
               tokensOut: reply.tokensOut,
+              cacheCreationTokens: reply.cacheCreationTokens,
+              cacheReadTokens: reply.cacheReadTokens,
             ),
           ),
+        );
+        final int cached = reply.cacheCreationTokens + reply.cacheReadTokens;
+        _emit(
+          'turn',
+          '${turn.purpose} by ${turn.agent.id}'
+              '${reply.tokensIn + cached + reply.tokensOut == 0 ? '' : ' · ${reply.tokensIn} fresh'
+                        '${cached == 0 ? '' : ', $cached cached'}'
+                        ', ${reply.tokensOut} out'}',
+          round: turn.agent.round,
         );
         return reply;
       } on CouncilPaused catch (p) {
         final DateTime from = clock.now();
-        _emit('paused', '${p.kind} limit until ${p.until.toIso8601String()}');
-        await clock.waitUntil(p.until);
+        final DateTime until = p.until.isAfter(from.add(pauseFloor))
+            ? p.until
+            : from.add(pauseFloor);
+        _emit(
+          'paused',
+          '${p.kind} limit until ${until.toIso8601String()} (${p.source})',
+        );
+        await clock.waitUntil(until);
         _s = _session.copyWith(
           manifest: _session.manifest.paused(
             LimitPause(
@@ -635,15 +812,23 @@ class CouncilRun {
               until: clock.now(),
               kind: p.kind,
               detail: p.detail,
+              source: p.source,
             ),
           ),
         );
       }
     }
-    onLost?.call(
-      'the provider paused this call more than $retriesPerCall times',
-    );
-    return null;
+  }
+
+  /// The highest ordinal already issued for ids of the form `<prefix>NNNN`.
+  static int _highestOrdinal(List<String> ids, String prefix) {
+    int highest = 0;
+    for (final String id in ids) {
+      if (!id.startsWith(prefix)) continue;
+      final int? n = int.tryParse(id.substring(prefix.length));
+      if (n != null && n > highest) highest = n;
+    }
+    return highest;
   }
 
   /// The angles seated in a round.
@@ -687,7 +872,7 @@ class CouncilRun {
     ];
     if (selected.isEmpty) return null;
     final AgentInstance integrator = _seat('integrator', 0);
-    final CouncilReply? reply = await _ask(
+    final CouncilReply reply = await _ask(
       CouncilTurn(
         agent: integrator,
         purpose: 'integrate',
@@ -698,7 +883,6 @@ class CouncilRun {
         conversation: 'integrate',
       ),
     );
-    if (reply == null) return null;
     final ParsedReply p = CouncilReplyParser.parse(reply.text);
     final List<CouncilBlock> blocks = p.of('mi-integration');
     if (blocks.isEmpty) return null;

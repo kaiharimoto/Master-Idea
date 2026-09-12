@@ -11,13 +11,15 @@ Object? release(List<Map<String, Object?>> assets) => jsonDecode(
   }),
 );
 
-Map<String, Object?> asset(String name, {int size = 42 * 1024 * 1024}) =>
-    <String, Object?>{
-      'name': name,
-      'browser_download_url':
-          'https://github.com/kaiharimoto/Master-Idea/releases/download/dev/$name',
-      'size': size,
-    };
+Map<String, Object?> asset(
+  String name, {
+  int size = 42 * 1024 * 1024,
+}) => <String, Object?>{
+  'name': name,
+  'browser_download_url':
+      'https://github.com/kaiharimoto/Master-Idea/releases/download/dev/$name',
+  'size': size,
+};
 
 void main() {
   group('reading the rolling release', () {
@@ -39,10 +41,13 @@ void main() {
         currentBuild: '99',
         platform: UpdatePlatform.android,
       );
-      expect(c.outcome, UpdateOutcome.available,
-          reason:
-              'A string comparison puts "100" before "99" and reports a newer '
-              'build as older, forever.');
+      expect(
+        c.outcome,
+        UpdateOutcome.available,
+        reason:
+            'A string comparison puts "100" before "99" and reports a newer '
+            'build as older, forever.',
+      );
     });
 
     test('prefers the installer over the zip within one build', () {
@@ -54,10 +59,13 @@ void main() {
         currentBuild: '56',
         platform: UpdatePlatform.windows,
       );
-      expect(c.asset!.kind, AssetKind.installer,
-          reason:
-              'The installer is the one that can update the app without the '
-              'user handling a file at all.');
+      expect(
+        c.asset!.kind,
+        AssetKind.installer,
+        reason:
+            'The installer is the one that can update the app without the '
+            'user handling a file at all.',
+      );
     });
 
     test('still recognises the zip when that is all there is', () {
@@ -79,8 +87,11 @@ void main() {
       );
       expect(c.outcome, UpdateOutcome.noAsset);
       expect(c.detail, contains('Windows'));
-      expect(c.releaseUrl, isNotNull,
-          reason: 'The client can still be handed the release page.');
+      expect(
+        c.releaseUrl,
+        isNotNull,
+        reason: 'The client can still be handed the release page.',
+      );
     });
 
     test('a local build is told what is published, not that it is behind', () {
@@ -104,17 +115,23 @@ void main() {
       expect(c.isUpdate, isFalse);
     });
 
-    test('an unreadable page is reported rather than treated as up to date', () {
-      final UpdateCheck c = readRelease(
-        'not json at all',
-        currentBuild: '57',
-        platform: UpdatePlatform.android,
-      );
-      expect(c.outcome, UpdateOutcome.unreadable,
+    test(
+      'an unreadable page is reported rather than treated as up to date',
+      () {
+        final UpdateCheck c = readRelease(
+          'not json at all',
+          currentBuild: '57',
+          platform: UpdatePlatform.android,
+        );
+        expect(
+          c.outcome,
+          UpdateOutcome.unreadable,
           reason:
               'Offline must never look like "you are on the newest build" — '
-              'that is how a device sits on a broken build for a month.');
-    });
+              'that is how a device sits on a broken build for a month.',
+        );
+      },
+    );
 
     test('an asset from another program is not mistaken for one of ours', () {
       final UpdateCheck c = readRelease(
@@ -122,11 +139,14 @@ void main() {
         currentBuild: '56',
         platform: UpdatePlatform.android,
       );
-      expect(c.outcome, UpdateOutcome.noAsset,
-          reason:
-              'The two halves of this pair publish similarly named files, and '
-              'installing the wrong one would replace the app with the other '
-              'program.');
+      expect(
+        c.outcome,
+        UpdateOutcome.noAsset,
+        reason:
+            'The two halves of this pair publish similarly named files, and '
+            'installing the wrong one would replace the app with the other '
+            'program.',
+      );
     });
   });
 }

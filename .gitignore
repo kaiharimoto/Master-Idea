@@ -2,7 +2,13 @@
 .dart_tool/
 .packages
 build/
-pubspec.lock
+# Locked for the application, ignored for the three packages — Dart's own
+# guidance, and the reason it matters here: a build of one commit should be a
+# build of one commit. With every dependency floating, a transitive publish
+# between two CI runs changes what ships from the same source, which is the
+# one thing the committed signing key and the build-number contract exist to
+# make impossible.
+packages/*/pubspec.lock
 *.iml
 .flutter-plugins
 .flutter-plugins-dependencies

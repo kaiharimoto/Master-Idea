@@ -18,6 +18,8 @@ class ModelCall {
     required this.replyChars,
     this.tokensIn = 0,
     this.tokensOut = 0,
+    this.cacheCreationTokens = 0,
+    this.cacheReadTokens = 0,
   });
 
   final DateTime at;
@@ -34,8 +36,20 @@ class ModelCall {
 
   /// Zero when the transport does not report usage. Recorded as zero rather
   /// than omitted, so 'not reported' and 'nothing spent' stay distinguishable.
+  ///
+  /// [tokensIn] is **fresh** input only. Everything the provider served out of
+  /// its cache is below, because the three are priced differently and a sum
+  /// cannot be taken apart again.
   final int tokensIn;
   final int tokensOut;
+  final int cacheCreationTokens;
+  final int cacheReadTokens;
+
+  /// Every input token handed over, however it was priced.
+  ///
+  /// Not a cost. This record multiplies nothing by a rate that changes without
+  /// warning; it counts what was sent.
+  int get inputAllIn => tokensIn + cacheCreationTokens + cacheReadTokens;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'at': at.toIso8601String(),
@@ -45,6 +59,8 @@ class ModelCall {
     'replyChars': replyChars,
     'tokensIn': tokensIn,
     'tokensOut': tokensOut,
+    'cacheCreationTokens': cacheCreationTokens,
+    'cacheReadTokens': cacheReadTokens,
   };
 
   static ModelCall fromJson(Map<String, Object?> j) => ModelCall(
@@ -55,6 +71,10 @@ class ModelCall {
     replyChars: (j['replyChars']! as num).toInt(),
     tokensIn: (j['tokensIn'] as num?)?.toInt() ?? 0,
     tokensOut: (j['tokensOut'] as num?)?.toInt() ?? 0,
+    // A session written before cached input was measured reads as zero, which
+    // is the truth about it: nothing counted them.
+    cacheCreationTokens: (j['cacheCreationTokens'] as num?)?.toInt() ?? 0,
+    cacheReadTokens: (j['cacheReadTokens'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -71,16 +91,24 @@ class LimitPause {
     required this.until,
     required this.kind,
     required this.detail,
+    this.source = 'guessed',
   });
 
   final DateTime from;
   final DateTime until;
 
-  /// `rate` or `session`.
+  /// `session`, `weekly`, `overage`, `rate` or `transient`.
   final String kind;
 
   /// What the provider said, as it said it.
   final String detail;
+
+  /// How the resume time was arrived at: `explicit`, `stated`, `inferred` or
+  /// `guessed`. Recorded because a guess and a timestamp the provider gave are
+  /// worth different amounts to whoever reads this afterwards, and a guess
+  /// that reads like a fact is how an unattended run is trusted about
+  /// something nobody ever knew.
+  final String source;
 
   Duration get length => until.difference(from);
 
@@ -89,6 +117,7 @@ class LimitPause {
     'until': until.toIso8601String(),
     'kind': kind,
     'detail': detail,
+    'source': source,
     'seconds': length.inSeconds,
   };
 
@@ -97,6 +126,37 @@ class LimitPause {
     until: DateTime.parse('${j['until']}'),
     kind: '${j['kind']}',
     detail: '${j['detail']}',
+    source: '${j['source'] ?? 'guessed'}',
+  );
+}
+
+/// A wait the client imposed.
+///
+/// Kept apart from [LimitPause] because it means the opposite thing: a limit
+/// is the provider stopping the council, and a hold is the client asking it
+/// to wait. Nothing new goes out while a hold stands; whatever was already in
+/// flight finishes and is kept. Excluded from council time for the same
+/// reason a limit is — the council was not deliberating — but never read by
+/// the invariant suite as a threat to dryness, because a hold defers a round
+/// without cutting it: every angle that was seated still searches, after.
+@immutable
+class Hold {
+  const Hold({required this.from, required this.until});
+
+  final DateTime from;
+  final DateTime until;
+
+  Duration get length => until.difference(from);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'from': from.toIso8601String(),
+    'until': until.toIso8601String(),
+    'seconds': length.inSeconds,
+  };
+
+  static Hold fromJson(Map<String, Object?> j) => Hold(
+    from: DateTime.parse('${j['from']}'),
+    until: DateTime.parse('${j['until']}'),
   );
 }
 
@@ -112,6 +172,7 @@ class RunManifest {
     this.endedAt,
     this.calls = const <ModelCall>[],
     this.pauses = const <LimitPause>[],
+    this.holds = const <Hold>[],
     this.dryness,
   });
 
@@ -128,46 +189,96 @@ class RunManifest {
   final DateTime? endedAt;
   final List<ModelCall> calls;
   final List<LimitPause> pauses;
+
+  /// Every time the client held the sitting, with both ends.
+  final List<Hold> holds;
+
   final DrynessDecision? dryness;
 
   Duration get wallClock => (endedAt ?? startedAt).difference(startedAt);
 
-  /// Wall clock less every provider pause. This is what a tier's expectation
-  /// is compared against — a run that waited four hours for a limit to lift
-  /// did not deliberate for four hours.
+  /// Wall clock less every provider pause and every client hold. This is
+  /// what a tier's expectation is compared against — a run that waited four
+  /// hours for a limit to lift, or overnight for its client to come back,
+  /// did not deliberate for those hours.
   Duration get councilTime {
-    Duration paused = Duration.zero;
+    Duration away = Duration.zero;
     for (final LimitPause p in pauses) {
-      paused += p.length;
+      away += p.length;
     }
-    return wallClock - paused;
+    for (final Hold h in holds) {
+      away += h.length;
+    }
+    return wallClock - away;
   }
+
+  /// Calls made between two instants — one round's worth, when handed a
+  /// round's ends. The manifest is flat on purpose, so this is how a round is
+  /// costed after the fact.
+  List<ModelCall> callsIn(DateTime from, DateTime until) => calls
+      .where((ModelCall c) => !c.at.isBefore(from) && !c.at.isAfter(until))
+      .toList();
+
+  /// How many, for the places that only need the count.
+  int callsBetween(DateTime from, DateTime until) =>
+      callsIn(from, until).length;
 
   int get tokensIn => calls.fold(0, (int sum, ModelCall c) => sum + c.tokensIn);
   int get tokensOut =>
       calls.fold(0, (int sum, ModelCall c) => sum + c.tokensOut);
+  int get cacheCreationTokens =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.cacheCreationTokens);
+  int get cacheReadTokens =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.cacheReadTokens);
+
+  /// Every input token this run handed over, cached or fresh.
+  int get inputAllIn =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.inputAllIn);
+
+  /// Prompt and reply sizes, measured locally rather than reported.
+  ///
+  /// The cross-check on the provider's own figures: a manifest claiming two
+  /// input tokens against a prompt of nine thousand characters is not
+  /// reporting a cheap call, it is reporting the wrong field.
+  int get promptChars =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.promptChars);
+  int get replyChars =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.replyChars);
 
   RunManifest record(ModelCall c) => _copy(calls: <ModelCall>[...calls, c]);
 
   RunManifest paused(LimitPause p) => _copy(pauses: <LimitPause>[...pauses, p]);
 
+  RunManifest held(Hold h) => _copy(holds: <Hold>[...holds, h]);
+
   RunManifest closed(DateTime at, DrynessDecision d) =>
       _copy(endedAt: at, dryness: d);
+
+  /// Record which transport actually drove the sitting.
+  ///
+  /// Written when the sitting opens rather than when the session does, because
+  /// the route is a fact about the device the run happened on and the session
+  /// may have been opened on the other one. A hand-carried session whose
+  /// manifest says `cli` is claiming six hours of autonomy that no phone has.
+  RunManifest onTransport(String t) => _copy(transport: t);
 
   RunManifest _copy({
     List<ModelCall>? calls,
     List<LimitPause>? pauses,
+    List<Hold>? holds,
     DateTime? endedAt,
     DrynessDecision? dryness,
+    String? transport,
   }) => RunManifest(
     sessionId: sessionId,
     templateId: templateId,
     tier: tier,
-    transport: transport,
+    transport: transport ?? this.transport,
     startedAt: startedAt,
     endedAt: endedAt ?? this.endedAt,
     calls: calls ?? this.calls,
     pauses: pauses ?? this.pauses,
+    holds: holds ?? this.holds,
     dryness: dryness ?? this.dryness,
   );
 
@@ -182,8 +293,11 @@ class RunManifest {
     'councilTimeSeconds': councilTime.inSeconds,
     'tokensIn': tokensIn,
     'tokensOut': tokensOut,
+    'cacheCreationTokens': cacheCreationTokens,
+    'cacheReadTokens': cacheReadTokens,
     'calls': calls.map((ModelCall c) => c.toJson()).toList(),
     'pauses': pauses.map((LimitPause p) => p.toJson()).toList(),
+    'holds': holds.map((Hold h) => h.toJson()).toList(),
     if (dryness != null) 'dryness': dryness!.toJson(),
   };
 
@@ -199,6 +313,9 @@ class RunManifest {
         .toList(),
     pauses: (j['pauses'] as List<Object?>? ?? const <Object?>[])
         .map((Object? e) => LimitPause.fromJson(e! as Map<String, Object?>))
+        .toList(),
+    holds: (j['holds'] as List<Object?>? ?? const <Object?>[])
+        .map((Object? e) => Hold.fromJson(e! as Map<String, Object?>))
         .toList(),
     dryness: j['dryness'] == null
         ? null

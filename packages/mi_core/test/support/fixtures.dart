@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:mi_core/mi_core.dart';
 
 /// A clock that never waits.
@@ -41,9 +43,18 @@ class ScriptedCouncil implements CouncilTransport {
     this.perAngle = 2,
     this.silentFromRound = 3,
     this.pauseOnCall,
+    this.pauseUntilCall,
+    this.stopOnCall,
+    this.failOnCall,
     this.unsourcedInRound,
     this.dissentEvery = 3,
+    this.onCall,
   });
+
+  /// Called with the running call count on every call, before it is
+  /// answered, so a test can act on the run — hold it, say — from inside a
+  /// turn, at the one moment the timing is not left to chance.
+  final void Function(int calls)? onCall;
 
   /// How many directions each angle returns while it still has any.
   final int perAngle;
@@ -54,6 +65,16 @@ class ScriptedCouncil implements CouncilTransport {
 
   /// Raise a session limit on the nth call, once.
   final int? pauseOnCall;
+
+  /// Raise a session limit on every call up to this one, so a run has to sit
+  /// through more waits than any retry budget would have allowed.
+  final int? pauseUntilCall;
+
+  /// The client stopped the sitting on the nth call.
+  final int? stopOnCall;
+
+  /// The transport failed on the nth call for a reason that is not a limit.
+  final int? failOnCall;
 
   /// Return a direction citing an interview answer that does not exist, to
   /// prove the run refuses it rather than storing an unsourced direction.
@@ -77,6 +98,7 @@ class ScriptedCouncil implements CouncilTransport {
   Future<CouncilReply> ask(CouncilTurn turn) async {
     calls++;
     seen.add(turn);
+    onCall?.call(calls);
     if (pauseOnCall != null && calls == pauseOnCall && !_paused) {
       _paused = true;
       throw CouncilPaused(
@@ -84,6 +106,20 @@ class ScriptedCouncil implements CouncilTransport {
         '5-hour limit reached',
         DateTime.utc(2026, 3, 1, 14),
       );
+    }
+    if (pauseUntilCall != null && calls <= pauseUntilCall!) {
+      throw CouncilPaused(
+        'session',
+        '5-hour limit reached',
+        DateTime.utc(2026, 3, 1, 9).add(Duration(hours: calls)),
+        source: 'stated',
+      );
+    }
+    if (stopOnCall != null && calls == stopOnCall) {
+      throw CouncilStopped(DateTime.utc(2026, 3, 1, 10));
+    }
+    if (failOnCall != null && calls == failOnCall) {
+      throw CouncilUnavailable('The CLI exited with 1: not logged in');
     }
     switch (turn.purpose) {
       case 'propose':
@@ -395,3 +431,17 @@ Session referenceSession({String templateId = 'hearing'}) {
     ),
   );
 }
+
+/// A session that actually ran, for the readers that must be pure over one.
+Future<Session> ranSession() => CouncilRun(
+  transport: ScriptedCouncil(),
+  clock: FakeClock(),
+).deliberate(referenceSession());
+
+/// This package's own source, for the handful of rules that can only be held
+/// by reading it.
+///
+/// The design system already does this to prove one colour is touched by one
+/// widget. The same trick is the only way to hold a rule about what a file
+/// must *not* reach for.
+String sourceOf(String pathInPackage) => File(pathInPackage).readAsStringSync();

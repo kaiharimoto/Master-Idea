@@ -9,7 +9,11 @@
 # so comparing these pixel for pixel on a runner would go red for reasons that
 # have nothing to do with the design. Regenerate and look at them with:
 #
-#     flutter test --tags shots --update-goldens
+#     flutter test --tags shots --run-skipped --update-goldens
+#
+# `--run-skipped` is load-bearing: a `skip` on the tag wins over `--tags`, so
+# the command this file used to give rendered nothing and said "All tests
+# skipped", which reads exactly like success.
 tags:
   shots:
-    skip: "Rendered on demand: flutter test --tags shots --update-goldens"
+    skip: "Rendered on demand: flutter test --tags shots --run-skipped --update-goldens"

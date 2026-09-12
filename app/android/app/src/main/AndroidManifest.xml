@@ -13,9 +13,13 @@
         android:label="Master Idea"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- The shell answers the back gesture itself: its regions are state
+             rather than routes, so without this back left the application
+             from anywhere, mid-sitting, with nothing asked. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:enableOnBackInvokedCallback="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"

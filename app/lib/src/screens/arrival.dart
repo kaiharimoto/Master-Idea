@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mi_design/mi_design.dart';
 
 import '../store/library.dart';
+import '../store/sitting.dart';
 import '../update/updater.dart';
 import 'interview_proceeding.dart';
 import 'library_screen.dart';
@@ -22,6 +23,7 @@ import 'update_sheet.dart';
 class ArrivalScreen extends StatefulWidget {
   const ArrivalScreen({
     required this.library,
+    required this.sitting,
     required this.updater,
     required this.onOpenLibrary,
     required this.onOpenSettings,
@@ -32,6 +34,7 @@ class ArrivalScreen extends StatefulWidget {
   });
 
   final Library library;
+  final Sitting sitting;
   final Updater updater;
   final VoidCallback onOpenLibrary;
   final VoidCallback onOpenSettings;
@@ -48,6 +51,17 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
   InterviewDraft? _draft;
 
   @override
+  void initState() {
+    super.initState();
+    // An interview that was interrupted is picked up where it stopped. It is
+    // the one stage where all of the client's work happens, and it used to
+    // live entirely in a widget's state: a phone reclaiming the app in the
+    // background lost fifteen answers with nothing to resume.
+    final Map<String, Object?>? kept = widget.library.draft;
+    if (kept != null) _draft = InterviewDraft.fromJson(kept);
+  }
+
+  @override
   void dispose() {
     _idea.dispose();
     _draft?.dispose();
@@ -56,11 +70,15 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
 
   void _begin() {
     final String said = _idea.text.trim();
-    if (said.isEmpty) return;
+    if (said.isEmpty) {
+      miNotice(context, 'Say the idea first, however unfinished.');
+      return;
+    }
     setState(() {
       _draft = InterviewDraft(rawIdea: said);
       _idea.clear();
     });
+    widget.library.saveDraft(_draft!.toJson());
   }
 
   @override
@@ -77,7 +95,11 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
     if (widget.showLibrary) {
       return _framed(
         c,
-        LibraryScreen(library: widget.library, onOpened: widget.onLeaveRegion),
+        LibraryScreen(
+          library: widget.library,
+          sitting: widget.sitting,
+          onOpened: widget.onLeaveRegion,
+        ),
         title: 'Sessions',
       );
     }
@@ -90,6 +112,7 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
           child: InterviewProceeding(
             draft: draft,
             library: widget.library,
+            sitting: widget.sitting,
             onAbandoned: () => setState(() {
               _draft?.dispose();
               _draft = null;
@@ -120,7 +143,9 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
               ),
               const SizedBox(height: MiSpace.sm),
               Text(
-                '${MiSubmit.hintFor(context)}, or the button below.',
+                widget.library.isLoaded
+                    ? '${MiSubmit.hintFor(context)}, or the button below.'
+                    : 'Reading what is already on this device…',
                 style: MiType.caption.copyWith(color: c.inkFaint),
               ),
             ],
@@ -134,13 +159,23 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
           disclosures: <Widget>[
             MiDisclosure(
               label: 'Sessions already before the council',
-              trailingNote: widget.library.isEmpty
+              trailingNote: widget.library.problem != null
+                  ? 'unreadable'
+                  : widget.library.isEmpty
                   ? 'none yet'
                   : '${widget.library.sessions.length}',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  if (widget.library.isEmpty)
+                  if (widget.library.problem != null)
+                    Text(
+                      'The stored sessions could not be read on this device: '
+                      '${widget.library.problem}. Nothing has been lost — the '
+                      'files are where they were — but this copy cannot open '
+                      'them. Settings has the diagnostics to send.',
+                      style: MiType.prose.copyWith(color: c.warning),
+                    )
+                  else if (widget.library.isEmpty)
                     Text(
                       'Nothing has been put before the council on this device '
                       'yet. Every session is kept here as plain files, with no '
@@ -162,10 +197,7 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
                 spacing: MiSpace.sm,
                 runSpacing: MiSpace.sm,
                 children: <Widget>[
-                  MiButton(
-                    label: 'Settings',
-                    onPressed: widget.onOpenSettings,
-                  ),
+                  MiButton(label: 'Settings', onPressed: widget.onOpenSettings),
                   ListenableBuilder(
                     listenable: widget.updater,
                     builder: (BuildContext context, _) => MiButton(

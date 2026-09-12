@@ -6,6 +6,7 @@ import 'package:mi_core/mi_core.dart';
 import 'package:mi_engine/mi_engine.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../transport/council_session.dart';
 import 'diagnostics.dart';
 import 'settings.dart';
 
@@ -41,6 +42,14 @@ class Library extends ChangeNotifier {
   bool get isLoaded => _loaded;
   Settings get settings => _settings;
 
+  /// Why the library could not be read, if it could not.
+  ///
+  /// Logged only, it produced an app that says "nothing here yet" to somebody
+  /// whose sessions are all present on disk and unreadable for one nameable
+  /// reason.
+  String? _problem;
+  String? get problem => _problem;
+
   /// Newest first, which is the order a library is read in.
   List<Session> get sessions => <Session>[
     for (final String id in _order)
@@ -63,6 +72,22 @@ class Library extends ChangeNotifier {
   Future<SessionStore> _sessionStore() async =>
       _store ??= SessionStore(await _dir());
 
+  int _lastMinted = 0;
+
+  /// An id for a session that will never touch the disk.
+  ///
+  /// Guarded the same way `SessionStore.mintId` is, and for the same reason:
+  /// a Windows clock has a coarse tick, two ids minted inside one tick are the
+  /// same id, and the second session then silently replaces the first in the
+  /// library. Master Prompt lost a mission to exactly this. The on-disk minter
+  /// has always been careful about it; this one read the clock and hoped.
+  String _mintInMemory() {
+    int micros = DateTime.now().microsecondsSinceEpoch;
+    if (micros <= _lastMinted) micros = _lastMinted + 1;
+    _lastMinted = micros;
+    return 'mem-${micros.toRadixString(36)}';
+  }
+
   Future<void> load() async {
     if (inMemory) {
       _loaded = true;
@@ -84,8 +109,10 @@ class Library extends ChangeNotifier {
         Diagnostics.instance.log('Skipped an unreadable session $id: $e');
       }
     }
-    _order.sort((String a, String b) =>
-        _sessions[b]!.createdAt.compareTo(_sessions[a]!.createdAt));
+    _order.sort(
+      (String a, String b) =>
+          _sessions[b]!.createdAt.compareTo(_sessions[a]!.createdAt),
+    );
 
     final File s = File('${_root!.path}${Platform.pathSeparator}settings.json');
     if (s.existsSync()) {
@@ -94,6 +121,17 @@ class Library extends ChangeNotifier {
         if (j is Map<String, Object?>) _settings = Settings.fromJson(j);
       } on FormatException {
         _settings = const Settings();
+      }
+    }
+
+    final File d = _draftFile(_root!);
+    if (d.existsSync()) {
+      try {
+        final Object? j = jsonDecode(d.readAsStringSync());
+        if (j is Map<String, Object?>) _draft = j;
+      } on FormatException {
+        // An unreadable draft is not worth refusing to start over.
+        _draft = null;
       }
     }
 
@@ -115,7 +153,7 @@ class Library extends ChangeNotifier {
     }
 
     final String id = inMemory
-        ? 'mem-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+        ? _mintInMemory()
         : (await _sessionStore()).mintId();
     final String title = SessionTitle.from(interview.brief.restatement);
     final Session session = Session(
@@ -128,13 +166,17 @@ class Library extends ChangeNotifier {
         sessionId: id,
         templateId: interview.verdict.templateId,
         tier: interview.verdict.template.tier,
-        transport: 'cli',
+        // What this device could do, if it ran now. The sitting writes the
+        // route it actually took when it opens, because a session can be
+        // created on one of these clients and run on the other.
+        transport: canDriveCouncil ? 'cli' : 'handover',
         startedAt: DateTime.now().toUtc(),
       ),
     );
     _sessions[id] = session;
     _order.insert(0, id);
     _openId = id;
+    await clearDraft();
     Diagnostics.instance.log(
       'Opened session $id at the ${interview.verdict.template.name} tier.',
     );
@@ -150,6 +192,29 @@ class Library extends ChangeNotifier {
     notifyListeners();
     if (inMemory) return;
     (await _sessionStore()).write(s);
+  }
+
+  /// Remove a session and everything in it.
+  ///
+  /// Nothing is hosted anywhere, so this is the only copy — which is why the
+  /// screen asks first and says so in those words. The store refuses an id
+  /// that is not a session of its own, so a bad one cannot take a directory
+  /// with it.
+  Future<void> delete(String id) async {
+    if (_openId == id) _openId = null;
+    _sessions.remove(id);
+    _order.remove(id);
+    notifyListeners();
+    if (inMemory) return;
+    (await _sessionStore()).delete(id);
+    Diagnostics.instance.log('Deleted session $id.');
+  }
+
+  /// Called when [load] itself threw, so the screen can say so.
+  void failedToLoad(String why) {
+    _problem = why;
+    _loaded = true;
+    notifyListeners();
   }
 
   void select(String id) {
@@ -168,6 +233,41 @@ class Library extends ChangeNotifier {
   /// Where a session's files are, for the client who wants to look.
   String pathOf(String id) =>
       _root == null ? '' : '${_root!.path}${Platform.pathSeparator}$id';
+
+  /// Where the library itself is. Not the newest session's own directory,
+  /// which is what "Kept in" used to show.
+  String get root => _root?.path ?? '';
+
+  /// The interview in progress, if one is.
+  ///
+  /// An interview is fifteen questions of the client's own words and the one
+  /// stage where all of their work happens. It lived in a widget's state: a
+  /// phone reclaiming the app in the background lost every answer, with
+  /// nothing on disk and nothing to resume. It is a **draft** and not a
+  /// record — nothing here has been through the gate — so it lives beside the
+  /// settings rather than among the sessions, and it is deleted the moment
+  /// the gate closes over it.
+  Map<String, Object?>? _draft;
+
+  Map<String, Object?>? get draft => _draft;
+
+  Future<void> saveDraft(Map<String, Object?> d) async {
+    _draft = d;
+    if (inMemory) return;
+    final Directory dir = await _dir();
+    _draftFile(dir).writeAsStringSync(jsonEncode(d), flush: true);
+  }
+
+  Future<void> clearDraft() async {
+    _draft = null;
+    notifyListeners();
+    if (inMemory) return;
+    final File f = _draftFile(await _dir());
+    if (f.existsSync()) f.deleteSync();
+  }
+
+  File _draftFile(Directory dir) =>
+      File('${dir.path}${Platform.pathSeparator}draft.json');
 
   Future<void> updateSettings(Settings s) async {
     _settings = s;

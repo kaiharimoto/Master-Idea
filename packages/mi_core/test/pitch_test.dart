@@ -116,6 +116,28 @@ void main() {
       );
     });
   });
+
+  group('portability is about tags, not characters', () {
+    test('ordinary prose containing a comparison stays portable', () {
+      expect(
+        PitchPortability.tells(
+          'Ship it in <10 minutes, and only if a < b holds for every reader.',
+        ),
+        isEmpty,
+        reason:
+            'A check that fires on ordinary writing is a check nobody reads, '
+            'and every pitch it condemns is one somebody sends anyway.',
+      );
+    });
+
+    test('an actual tag is still caught', () {
+      expect(
+        PitchPortability.tells('Then <invoke name="x"> the tool.'),
+        isNotEmpty,
+      );
+      expect(PitchPortability.tells('Wrapped in <thinking> tags.'), isNotEmpty);
+    });
+  });
 }
 
 /// The `mi-pitch` block, read the way Master Prompt would read it.

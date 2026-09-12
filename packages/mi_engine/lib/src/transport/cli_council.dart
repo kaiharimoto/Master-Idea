@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
 import 'package:mi_core/mi_core.dart';
 
 import '../cli/claude_cli.dart';
+import '../cli/limit_reading.dart';
 import '../cli/turn_plan.dart';
 
 /// The council, reached through the Claude Code CLI.
@@ -25,8 +28,13 @@ class CliCouncil implements CouncilTransport {
     required this.workingDirectory,
     this.model,
     this.environment = const <String, String>{},
-    this.limitPauseFor = const Duration(minutes: 20),
-  });
+    this.maxConcurrent = 4,
+    this.turnTimeout = const Duration(minutes: 15),
+    this.patterns = LimitReader.defaultPatterns,
+    DateTime Function()? now,
+  }) : _now = now ?? _utcNow;
+
+  static DateTime _utcNow() => DateTime.now().toUtc();
 
   final ClaudeInstall install;
 
@@ -40,13 +48,41 @@ class CliCouncil implements CouncilTransport {
   /// provider limit without waiting for a real one.
   final Map<String, String> environment;
 
-  /// How long to wait when the provider reports a limit without saying when it
-  /// lifts. A guess, and recorded as one in the manifest — but a guess that
-  /// waits is right, because the alternative is recording a limit as silence
-  /// and a limit recorded as silence ends a run that had not finished.
-  final Duration limitPauseFor;
+  /// How many turns may be in flight at once.
+  ///
+  /// A round at the largest tier fans out twelve angles, each of which then
+  /// judges its own directions concurrently — some fifty `claude` processes on
+  /// a laptop, which is itself the commonest way to provoke the limits this
+  /// class then has to wait out. **Not a stop condition**: nothing here can end
+  /// a round or a run, it only decides how many turns are in the air at once,
+  /// and breadth and the dryness rule are untouched by it.
+  final int maxConcurrent;
 
-  TurnPlan planFor() => TurnPlanBuilder.build(
+  /// How long one turn may take before the process is killed.
+  ///
+  /// A hung child otherwise holds its future forever with nothing to break it,
+  /// which on an unattended run is indistinguishable from a council that is
+  /// thinking hard.
+  final Duration turnTimeout;
+
+  /// The wordings a limit arrives in. Data, so a change to them is not a
+  /// release.
+  final LimitPatterns patterns;
+
+  final DateTime Function() _now;
+
+  /// When this sitting's first turn ran, which is what a five-hour block is
+  /// measured from when the provider will not say.
+  DateTime? _blockStartedAt;
+
+  int _live = 0;
+  final Queue<Completer<void>> _queue = Queue<Completer<void>>();
+  final Set<Process> _running = <Process>{};
+  bool _stopped = false;
+
+  TurnPlan? _plan;
+
+  TurnPlan planFor() => _plan ??= TurnPlanBuilder.build(
     executable: install.path,
     capabilities: install.capabilities,
     workingDirectory: workingDirectory,
@@ -54,8 +90,61 @@ class CliCouncil implements CouncilTransport {
     model: model,
   );
 
+  /// What this build of the CLI could not do, and what was used instead.
+  ///
+  /// Surfaced rather than kept, because the commonest degradation — a build
+  /// without `stream-json` — costs the manifest its token figures for the
+  /// whole run, and a manifest that quietly reports nothing spent is not
+  /// distinguishable from one that measured nothing.
+  List<String> get notes => planFor().notes;
+
+  /// Stop this transport. Every turn in flight is killed and every turn after
+  /// it refused, so a run driven by this ends at once rather than at the end
+  /// of whatever it happened to be doing.
+  void cancel() {
+    _stopped = true;
+    for (final Process p in _running.toList()) {
+      p.kill(ProcessSignal.sigterm);
+    }
+    _running.clear();
+    while (_queue.isNotEmpty) {
+      final Completer<void> c = _queue.removeFirst();
+      if (!c.isCompleted) c.complete();
+    }
+  }
+
   @override
   Future<CouncilReply> ask(CouncilTurn turn) async {
+    if (_stopped) throw CouncilStopped(_now());
+    await _acquire();
+    try {
+      if (_stopped) throw CouncilStopped(_now());
+      return await _run(turn);
+    } finally {
+      _release();
+    }
+  }
+
+  Future<void> _acquire() async {
+    if (_live < maxConcurrent) {
+      _live++;
+      return;
+    }
+    final Completer<void> waiting = Completer<void>();
+    _queue.add(waiting);
+    await waiting.future;
+    _live++;
+  }
+
+  void _release() {
+    _live--;
+    if (_queue.isNotEmpty && _live < maxConcurrent) {
+      final Completer<void> next = _queue.removeFirst();
+      if (!next.isCompleted) next.complete();
+    }
+  }
+
+  Future<CouncilReply> _run(CouncilTurn turn) async {
     final TurnPlan plan = planFor();
     final Directory dir = Directory(workingDirectory);
     if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -68,14 +157,24 @@ class CliCouncil implements CouncilTransport {
       environment: environment.isEmpty ? null : environment,
       includeParentEnvironment: true,
     );
+    _running.add(process);
+    _blockStartedAt ??= _now();
 
     // The prompt goes down stdin rather than on the command line: a propose
     // turn runs to several thousand characters, and Windows refuses a command
     // line past about thirty-two thousand — through a .cmd, far less.
-    process.stdin.write(turn.prompt);
+    // Wrapped because a child that has already died makes this a broken pipe,
+    // and the useful account of what went wrong is on its stderr and in its
+    // exit code — both of which are read below. An IOException thrown from
+    // here would replace that account with a plumbing error.
+    try {
+      process.stdin.write(turn.prompt);
+    } on Object {
+      // Deliberately ignored; the exit code below says what happened.
+    }
     // `Process.start` does not close the child's stdin. Without this the CLI
     // waits for more piped input on every single turn.
-    unawaited(process.stdin.close());
+    unawaited(process.stdin.close().catchError((Object _) {}));
 
     final StringBuffer out = StringBuffer();
     final StringBuffer err = StringBuffer();
@@ -85,34 +184,154 @@ class CliCouncil implements CouncilTransport {
     final Future<void> stderrDone = process.stderr
         .transform(utf8.decoder)
         .forEach(err.write);
-    await Future.wait(<Future<void>>[stdoutDone, stderrDone]);
-    final int code = await process.exitCode;
 
-    // A usage limit is reported on **stderr and nowhere else**. `Error.message`
-    // is non-enumerable and the CLI serialises with a plain JSON.stringify, so
-    // limit text can never appear in the stdout JSON stream — a detector that
-    // greps stdout matches nothing, forever, and presents as a hang.
-    final DateTime? until = _limitUntil(err.toString());
-    if (until != null) {
-      throw CouncilPaused('session', err.toString().trim(), until);
+    bool timedOut = false;
+    final Timer killer = Timer(turnTimeout, () {
+      timedOut = true;
+      process.kill(ProcessSignal.sigkill);
+    });
+
+    int code;
+    try {
+      await Future.wait(<Future<void>>[stdoutDone, stderrDone]);
+      code = await process.exitCode;
+    } finally {
+      killer.cancel();
+      _running.remove(process);
     }
 
-    if (code != 0) {
-      throw CouncilPaused(
-        'rate',
-        'The CLI exited with $code: ${err.toString().trim()}',
-        DateTime.now().toUtc().add(limitPauseFor),
+    if (_stopped) throw CouncilStopped(_now());
+    if (timedOut) {
+      throw CouncilUnavailable(
+        'The turn was still running after ${turnTimeout.inMinutes} minutes '
+        'and was killed. A hung call is not a council thinking.',
       );
+    }
+
+    // The account of a failure is on **both streams, and usually only one**.
+    // An unknown flag or a crash goes to stderr. A usage limit, an expired
+    // login and an API error under `--print` go to *stdout*, as a `result`
+    // event with `is_error` set — `"Claude AI usage limit reached|<epoch>"`
+    // — and stderr stays empty. The first build of this read stderr alone,
+    // on the belief that limit text could never reach the JSON stream; a real
+    // sitting then ended on "The CLI exited with 1: " with nothing after the
+    // colon, and a limit that would have lifted in two hours was recorded as
+    // a failure that never does.
+    final String said = _errorAccount(out.toString());
+    final bool cliSaidError = said.isNotEmpty;
+    final String account = <String>[
+      err.toString().trim(),
+      said,
+    ].where((String s) => s.isNotEmpty).join('\n');
+
+    final LimitReading reading = LimitReader.read(
+      account,
+      now: _now(),
+      blockStartedAt: _blockStartedAt,
+      patterns: patterns,
+    );
+    if (reading.kind.liftsByWaiting) {
+      throw CouncilPaused(
+        reading.kind.name,
+        reading.detail,
+        reading.until!,
+        source: reading.source,
+      );
+    }
+
+    if (code != 0 || cliSaidError) {
+      // Everything else fails the sitting where it stands. None of these lift
+      // by waiting, and a run that waits them out loses every search and then
+      // records the provider's silence as the council's.
+      throw CouncilUnavailable(switch (reading.kind) {
+        FailureKind.auth =>
+          'The Claude CLI is not logged in, or its token has expired. '
+              '${reading.detail}',
+        FailureKind.overage =>
+          'The account has no credit left for this. Waiting will not lift it. '
+              '${reading.detail}',
+        _ when reading.detail.isEmpty =>
+          // Said plainly, because an empty reason after a colon reads as the
+          // app having forgotten to say — and the one thing a client can act
+          // on here is that the CLI itself, run by hand, will show why.
+          'The Claude CLI exited with code $code and wrote nothing on either '
+              'stream. Run it once by hand from a terminal to see what it '
+              'says; the commonest causes are a usage limit and a login '
+              'that has expired.',
+        _ => 'The Claude CLI exited with code $code: ${reading.detail}',
+      });
     }
 
     return _read(out.toString());
   }
 
+  /// What the CLI said went wrong, read out of the stdout event stream.
+  ///
+  /// Under `--print` the CLI's own failures — a usage limit, an expired
+  /// login, an API error — arrive as a `result` event with `is_error` set and
+  /// the reason in `result`, or as an `error` event; stderr carries nothing.
+  /// Empty when no event claimed an error.
+  static String _errorAccount(String stdout) {
+    final List<String> said = <String>[];
+    for (final String line in stdout.split('\n')) {
+      final String trimmed = line.trim();
+      if (!trimmed.startsWith('{')) continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(trimmed);
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map<String, Object?>) continue;
+      final String type = '${decoded['type'] ?? ''}';
+      final String subtype = '${decoded['subtype'] ?? ''}';
+      final bool claimsError =
+          decoded['is_error'] == true ||
+          type == 'error' ||
+          subtype.startsWith('error');
+      if (!claimsError) continue;
+
+      final Object? result = decoded['result'];
+      if (result is String && result.trim().isNotEmpty) said.add(result.trim());
+      final Object? error = decoded['error'];
+      if (error is String && error.trim().isNotEmpty) said.add(error.trim());
+      if (error is Map<String, Object?>) {
+        final Object? message = error['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          said.add(message.trim());
+        }
+      }
+      // An error event that carried no words still carried its subtype, and
+      // `error_max_turns` or `error_during_execution` is more than nothing.
+      if (said.isEmpty && subtype.isNotEmpty) said.add(subtype);
+    }
+    return said.join('\n');
+  }
+
   /// Pull the assistant's text and its usage out of whatever the build wrote.
+  ///
+  /// **Usage is on the `result` event and inside `message` on the assistant
+  /// events — never at the root of an assistant event.** The first version of
+  /// this read `decoded['usage']` at the root and accumulated it over every
+  /// line, which against the real CLI matched only the result event's
+  /// `input_tokens`: the *uncached remainder*, two tokens on a call whose
+  /// prompt ran to nine thousand characters. A whole assize was recorded at
+  /// two input tokens a call and nobody could tell, because the only fake
+  /// emitting this shape put usage where nothing real puts it.
+  ///
+  /// So: the result event's usage is the turn's own roll-up and wins when it
+  /// is there; the assistant events are the fallback for a stream cut off
+  /// before the roll-up arrives. Two accumulators rather than one, because a
+  /// build that emits both would otherwise count the same tokens twice.
   static CouncilReply _read(String stdout) {
-    final StringBuffer text = StringBuffer();
-    int tokensIn = 0;
-    int tokensOut = 0;
+    final StringBuffer assistantText = StringBuffer();
+    String? resultText;
+    _Usage? rollUp;
+    // Keyed by message id and overwritten rather than added: one assistant
+    // message can be reported more than once across a turn, and adding every
+    // report counts it every time.
+    final Map<String, _Usage> perMessage = <String, _Usage>{};
+    int anon = 0;
     bool sawJson = false;
 
     for (final String line in stdout.split('\n')) {
@@ -126,66 +345,88 @@ class CliCouncil implements CouncilTransport {
       }
       if (decoded is! Map<String, Object?>) continue;
       sawJson = true;
-      final Object? usage = decoded['usage'];
-      if (usage is Map<String, Object?>) {
-        tokensIn += (usage['input_tokens'] as num?)?.toInt() ?? 0;
-        tokensOut += (usage['output_tokens'] as num?)?.toInt() ?? 0;
-      }
+
       final Object? message = decoded['message'];
       if (message is Map<String, Object?>) {
         final Object? content = message['content'];
         if (content is List<Object?>) {
           for (final Object? part in content) {
             if (part is Map<String, Object?> && part['type'] == 'text') {
-              text.writeln('${part['text']}');
+              assistantText.writeln('${part['text']}');
             }
           }
         }
+        final _Usage? u = _Usage.from(message['usage']);
+        if (u != null) {
+          final Object? id = message['id'];
+          perMessage[id is String && id.isNotEmpty ? id : 'anon-${anon++}'] = u;
+        }
       }
-      final Object? result = decoded['result'];
-      if (result is String && decoded['type'] == 'result') {
-        text.writeln(result);
+
+      if (decoded['type'] == 'result') {
+        final Object? result = decoded['result'];
+        if (result is String) resultText = result;
+        rollUp = _Usage.from(decoded['usage']) ?? rollUp;
       }
     }
+
+    // The result event repeats the final assistant message in full. Taking
+    // both would hand the parser every block twice, and the deduplicator
+    // would then refuse each direction against its own first copy — a round
+    // reporting half its yield as 'already held' against itself.
+    final String text = (resultText != null && resultText.trim().isNotEmpty)
+        ? resultText
+        : assistantText.toString();
+
+    final _Usage usage = rollUp ?? _Usage.sum(perMessage.values);
 
     // A build with no stream-json writes plain text, and a turn is still a
     // turn. Falling back rather than refusing is what keeps an older CLI
     // usable at the cost of usage figures the manifest records as zero.
     return CouncilReply(
-      text: sawJson ? text.toString() : stdout,
-      tokensIn: tokensIn,
-      tokensOut: tokensOut,
+      text: sawJson ? text : stdout,
+      tokensIn: usage.input,
+      tokensOut: usage.output,
+      cacheCreationTokens: usage.cacheCreation,
+      cacheReadTokens: usage.cacheRead,
+    );
+  }
+}
+
+/// One `usage` object, with the cached halves the first reader threw away.
+@immutable
+class _Usage {
+  const _Usage({
+    this.input = 0,
+    this.output = 0,
+    this.cacheCreation = 0,
+    this.cacheRead = 0,
+  });
+
+  final int input;
+  final int output;
+  final int cacheCreation;
+  final int cacheRead;
+
+  static _Usage? from(Object? raw) {
+    if (raw is! Map<String, Object?>) return null;
+    int read(String key) => (raw[key] as num?)?.toInt() ?? 0;
+    return _Usage(
+      input: read('input_tokens'),
+      output: read('output_tokens'),
+      cacheCreation: read('cache_creation_input_tokens'),
+      cacheRead: read('cache_read_input_tokens'),
     );
   }
 
-  /// When the provider says the limit lifts, if it says.
-  static DateTime? _limitUntil(String stderr) {
-    final String s = stderr.toLowerCase();
-    final bool isLimit =
-        s.contains('usage limit') ||
-        s.contains('rate limit') ||
-        s.contains('limit reached') ||
-        s.contains('resets at');
-    if (!isLimit) return null;
-
-    // `resets at 3pm`, `retry after 900 seconds`, or an epoch. Anything the
-    // wording does not give is treated as unknown, and the caller waits its
-    // default rather than guessing short.
-    final RegExpMatch? epoch = RegExp(r'\b(1[6-9]\d{8})\b').firstMatch(s);
-    if (epoch != null) {
-      return DateTime.fromMillisecondsSinceEpoch(
-        int.parse(epoch.group(1)!) * 1000,
-        isUtc: true,
-      );
+  static _Usage sum(Iterable<_Usage> all) {
+    int i = 0, o = 0, cc = 0, cr = 0;
+    for (final _Usage u in all) {
+      i += u.input;
+      o += u.output;
+      cc += u.cacheCreation;
+      cr += u.cacheRead;
     }
-    final RegExpMatch? seconds = RegExp(
-      r'(?:retry after|in)\s+(\d+)\s*second',
-    ).firstMatch(s);
-    if (seconds != null) {
-      return DateTime.now().toUtc().add(
-        Duration(seconds: int.parse(seconds.group(1)!)),
-      );
-    }
-    return DateTime.now().toUtc().add(const Duration(minutes: 20));
+    return _Usage(input: i, output: o, cacheCreation: cc, cacheRead: cr);
   }
 }

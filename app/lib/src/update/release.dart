@@ -158,7 +158,10 @@ UpdateCheck readRelease(
   // user handling a file at all.
   final Map<RegExp, AssetKind> patterns = platform == UpdatePlatform.android
       ? <RegExp, AssetKind>{_apk: AssetKind.apk}
-      : <RegExp, AssetKind>{_setup: AssetKind.installer, _zip: AssetKind.archive};
+      : <RegExp, AssetKind>{
+          _setup: AssetKind.installer,
+          _zip: AssetKind.archive,
+        };
   final List<ReleaseAsset> found = <ReleaseAsset>[];
 
   final Object? assets = decoded['assets'];

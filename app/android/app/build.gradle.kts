@@ -21,7 +21,12 @@ android {
         applicationId = "com.masteridea.master_idea"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Pinned rather than inherited, because two branches in
+        // MainActivity depend on the floor: asking for install permission is
+        // an Android 8 API, and writing into the shared Downloads collection
+        // without any permission at all is an Android 10 one. An inherited
+        // default that moved would take a branch's meaning with it silently.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)

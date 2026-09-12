@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mi_core/mi_core.dart';
@@ -222,6 +223,105 @@ void main() {
       store.write(s);
       expect(store.listIds(), <String>[s.id]);
       expect(store.exists(s.id), isTrue);
+    });
+  });
+
+  group('removing a session', () {
+    test('takes its files with it and refuses anything else', () {
+      final Directory root = Directory.systemTemp.createTempSync('mi-rm');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final SessionStore store = SessionStore(root);
+      final Session s = referenceSession();
+      store.write(s);
+      expect(store.exists(s.id), isTrue);
+
+      store.delete(s.id);
+      expect(store.exists(s.id), isFalse);
+      expect(store.listIds(), isEmpty);
+
+      expect(
+        () => store.delete('../..'),
+        throwsA(isA<ArgumentError>()),
+        reason:
+            'This deletes recursively, so an id that walked out of the '
+            'library would take something else with it.',
+      );
+    });
+
+    test('refuses a directory that is not a stored session', () {
+      final Directory root = Directory.systemTemp.createTempSync('mi-rm2');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/not-a-session').createSync(recursive: true);
+      expect(
+        () => SessionStore(root).delete('not-a-session'),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  group('two writers', () {
+    test('the second is told who holds it rather than overwriting', () {
+      final Directory root = Directory.systemTemp.createTempSync('mi-lock');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final SessionStore store = SessionStore(root);
+      final Session s = referenceSession();
+      store.write(s);
+
+      expect(store.lock(s.id, 'mi run pid 1'), isTrue);
+      expect(
+        store.lock(s.id, 'the app'),
+        isFalse,
+        reason:
+            'Both writers hold a whole session in memory and write it out '
+            'entire, so the second to finish would discard the first\'s '
+            'rounds.',
+      );
+      expect(store.lockedBy(s.id), contains('pid 1'));
+      store.unlock(s.id);
+      expect(store.lock(s.id, 'the app'), isTrue);
+    });
+  });
+
+  group('a session from another build', () {
+    test('a newer stored shape is refused, not guessed at', () {
+      final Directory root = Directory.systemTemp.createTempSync('mi-schema');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final SessionStore store = SessionStore(root);
+      final Session s = referenceSession();
+      store.write(s);
+
+      final File index = File('${root.path}/${s.id}/session.json');
+      final Map<String, Object?> json =
+          jsonDecode(index.readAsStringSync())! as Map<String, Object?>;
+      index.writeAsStringSync(
+        jsonEncode(<String, Object?>{...json, 'schema': Session.schema + 1}),
+      );
+
+      expect(
+        () => store.read(s.id),
+        throwsA(isA<StateError>()),
+        reason:
+            'Reading it anyway is guessing at fields whose meaning has '
+            'changed under the same names.',
+      );
+    });
+
+    test('a pitch removed from a session is removed from disk', () {
+      final Directory root = Directory.systemTemp.createTempSync('mi-pitch');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final SessionStore store = SessionStore(root);
+      final Session s = referenceSession();
+      store.write(s.copyWith(pitch: 'A pitch for a selection.'));
+      expect(File('${root.path}/${s.id}/pitch.md').existsSync(), isTrue);
+
+      store.write(s.copyWith(dropPitch: true));
+      expect(
+        File('${root.path}/${s.id}/pitch.md').existsSync(),
+        isFalse,
+        reason:
+            'A launch document for a selection nobody has any more is worse '
+            'than none, because it reads as current.',
+      );
     });
   });
 }

@@ -8,10 +8,20 @@ import 'support/fixtures.dart';
 void main() {
   group('a stored session is the whole session', () {
     test('everything written is read back', () async {
-      final Session s = await CouncilRun(
+      final Session ran = await CouncilRun(
         transport: ScriptedCouncil(),
         clock: FakeClock(),
       ).deliberate(referenceSession());
+      // With a client hold on the manifest, which a run driven by a scripted
+      // council never places on its own.
+      final Session s = ran.copyWith(
+        manifest: ran.manifest.held(
+          Hold(
+            from: DateTime.utc(2026, 3, 1, 9, 30),
+            until: DateTime.utc(2026, 3, 1, 9, 45),
+          ),
+        ),
+      );
 
       final Session back = Session.fromJson(
         jsonDecode(jsonEncode(s.toJson())) as Map<String, Object?>,
@@ -48,6 +58,13 @@ void main() {
         s.manifest.dryness!.secondAngleSet,
       );
       expect(back.manifest.councilTime, s.manifest.councilTime);
+      expect(
+        back.manifest.holds.length,
+        s.manifest.holds.length,
+        reason:
+            'A hold that did not survive the round trip would put its '
+            'minutes back into council time on the next read.',
+      );
     });
 
     test(
@@ -152,6 +169,53 @@ void main() {
     test('never returns nothing', () {
       expect(SessionTitle.from('   '), 'Untitled session');
       expect(SessionTitle.slug('!!!'), 'session');
+    });
+  });
+
+  group('a session copy', () {
+    test('can drop an integration the selection has outgrown', () {
+      final Session s = referenceSession().copyWith(
+        selection: <String>['d-0001'],
+        integration: Integration(
+          forSelection: const <String>['d-0001'],
+          becomes: 'One thing rather than three.',
+          interactions: const <Interaction>[],
+          by: 'integrator#0.1',
+          computedAt: DateTime.utc(2026, 3, 1, 12),
+        ),
+        pitch: 'A pitch for one direction.',
+      );
+
+      final Session changed = s.copyWith(
+        selection: const <String>['d-0001', 'd-0002'],
+        dropIntegration: true,
+        dropPitch: true,
+      );
+
+      expect(changed.integration, isNull);
+      expect(changed.pitch, isEmpty);
+      expect(
+        s.integration,
+        isNotNull,
+        reason: 'The original is untouched; a session is a value.',
+      );
+    });
+
+    test('leaving them alone is still the default', () {
+      final Session s = referenceSession().copyWith(pitch: 'kept');
+      expect(s.copyWith(selection: const <String>['d-0001']).pitch, 'kept');
+    });
+  });
+
+  group('the stored shape', () {
+    test('says which version wrote it', () {
+      expect(
+        referenceSession().toJson()['schema'],
+        Session.schema,
+        reason:
+            'A build that reads files it does not understand should say so, '
+            'rather than throwing a cast error from four layers down.',
+      );
     });
   });
 }
