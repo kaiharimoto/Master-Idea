@@ -181,6 +181,118 @@ void main() {
     );
   });
 
+  group('what a turn cost', () {
+    test('the prompt is counted, not just its uncached remainder', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+      );
+      final CouncilReply reply = await council.ask(turn());
+
+      expect(
+        reply.tokensIn,
+        greaterThan(0),
+        reason:
+            'Usage sits inside `message` on an assistant event and at the '
+            'root of the result event, never at the root of an assistant '
+            'event. Reading the last of those made every input figure the '
+            'uncached remainder — two tokens a call against five hundred and '
+            'ninety-nine out, for twelve hundred calls.',
+      );
+      expect(
+        reply.cacheCreationTokens + reply.cacheReadTokens,
+        greaterThan(0),
+        reason:
+            'A cache read is not priced like fresh input. Folding them into '
+            'one number overstates what a run cost and cannot be unfolded by '
+            'anyone reading the manifest afterwards.',
+      );
+    });
+
+    test('a turn that used a tool is counted once, not once per event', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+        environment: const <String, String>{'MI_FAKE_TOOL_LOOP': '1'},
+      );
+      final CouncilReply reply = await council.ask(turn());
+
+      final CliCouncil plain = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+      );
+      final CouncilReply once = await plain.ask(turn());
+
+      expect(
+        reply.cacheCreationTokens,
+        once.cacheCreationTokens,
+        reason:
+            'One assistant message can be reported more than once across a '
+            'turn. Adding every report counts the same prompt every time, and '
+            'the roll-up on the result event already says what the turn cost.',
+      );
+    });
+
+    test(
+      'a stream cut off before the roll-up still says what it cost',
+      () async {
+        final CliCouncil council = CliCouncil(
+          install: await install(),
+          workingDirectory: '${tmp.path}/council',
+          environment: const <String, String>{'MI_FAKE_NO_RESULT': '1'},
+        );
+        final CouncilReply reply = await council.ask(turn());
+
+        expect(
+          reply.cacheCreationTokens,
+          greaterThan(0),
+          reason:
+              'A turn that answered and then lost its roll-up cost what it '
+              'cost. Recording zero would make a real spend indistinguishable '
+              'from a transport that measures nothing.',
+        );
+        expect(reply.text, contains('mi-'));
+      },
+    );
+
+    test('the result event repeating the answer does not double it', () async {
+      final CliCouncil council = CliCouncil(
+        install: await install(),
+        workingDirectory: '${tmp.path}/council',
+      );
+      final CouncilReply reply = await council.ask(turn());
+
+      expect(
+        'mi-direction'.allMatches(reply.text).length,
+        1,
+        reason:
+            'The result event repeats the whole final message. Keeping both '
+            'copies hands the parser every block twice, and the deduplicator '
+            'then refuses each direction against its own first copy.',
+      );
+    });
+
+    test('a whole run reports more input than output', () async {
+      final Session done = await CouncilRun(
+        transport: CliCouncil(
+          install: await install(),
+          workingDirectory: '${tmp.path}/council-cost',
+        ),
+        clock: FakeClock(),
+      ).deliberate(referenceSession());
+
+      expect(
+        done.manifest.inputAllIn,
+        greaterThan(done.manifest.tokensOut),
+        reason:
+            'A council prompt runs to thousands of characters and its reply to '
+            'hundreds. A manifest reporting two input tokens a call was '
+            'reading the wrong field and calling it the input, and nothing in '
+            'this suite noticed for a whole assize.',
+      );
+    });
+  });
+
   test('an exit that said nothing on either stream says so', () async {
     final CliCouncil council = CliCouncil(
       install: await install(),

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:mi_core/mi_core.dart';
 
 /// A clock that never waits.
@@ -429,3 +431,17 @@ Session referenceSession({String templateId = 'hearing'}) {
     ),
   );
 }
+
+/// A session that actually ran, for the readers that must be pure over one.
+Future<Session> ranSession() => CouncilRun(
+  transport: ScriptedCouncil(),
+  clock: FakeClock(),
+).deliberate(referenceSession());
+
+/// This package's own source, for the handful of rules that can only be held
+/// by reading it.
+///
+/// The design system already does this to prove one colour is touched by one
+/// widget. The same trick is the only way to hold a rule about what a file
+/// must *not* reach for.
+String sourceOf(String pathInPackage) => File(pathInPackage).readAsStringSync();

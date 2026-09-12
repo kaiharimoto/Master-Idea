@@ -16,11 +16,6 @@ class UnreachableCouncil implements CouncilTransport {
       throw StateError('the renderers reached back into the council');
 }
 
-Future<Session> ranSession() => CouncilRun(
-  transport: ScriptedCouncil(),
-  clock: FakeClock(),
-).deliberate(referenceSession());
-
 void main() {
   group('the dossier', () {
     test(
@@ -155,10 +150,28 @@ void main() {
       expect(text, contains('model calls'));
       expect(
         text,
-        contains('Round 1:'),
+        contains('Round 1'),
         reason:
-            'Proposed against kept is the difference between a round that '
-            'searched and a round that repeated itself.',
+            'What was put forward against what was kept is the difference '
+            'between a round that searched and a round that repeated itself.',
+      );
+      expect(
+        text,
+        contains('Inversion'),
+        reason:
+            'The record holds angle ids. A client reading '
+            '"constraint-tightening" is reading a machine\'s noun, and the '
+            'catalog has had a name for it all along.',
+      );
+      final RoundAccount first = RoundAccount.forSession(s).first;
+      expect(
+        text,
+        contains(first.funnel),
+        reason:
+            'The ledger and the client\'s own screen read one account of a '
+            'round. Two implementations of the same funnel drift, and an '
+            'export disagreeing with a live screen about one round is worse '
+            'than either being absent.',
       );
     });
 

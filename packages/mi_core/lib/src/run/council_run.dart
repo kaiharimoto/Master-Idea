@@ -81,6 +81,30 @@ class CouncilRun {
   static int mostCallsInRound(int breadth) =>
       breadth * (1 + wantedPerAngle * callsPerDirection) + 1;
 
+  /// Whether the cartographer redraws the map at the end of [round].
+  ///
+  /// Round one included, then every [HarnessTemplate.roundsPerBarrier] rounds
+  /// after it. A tier whose barrier is three otherwise ran its first two
+  /// rounds against nothing but the map drawn before the sitting opened.
+  ///
+  /// **Not a stop condition and not a barrier of its own.** The round closes
+  /// where it closed; this decides only whether one more seat is filled
+  /// before it does.
+  static bool mapsAfterRound(int round, HarnessTemplate t) =>
+      round == 1 || round % t.roundsPerBarrier == 0;
+
+  /// The round number the opening map is written in.
+  ///
+  /// **Zero, because it is drawn before any round has run.** A gap may only
+  /// be cited by a direction from a *later* round than the one that wrote it,
+  /// so a map written in round one could never source a round-one direction —
+  /// and at an assize round one puts forward forty-eight directions against
+  /// sixteen interview answers. There is no way to tell them apart without a
+  /// map, whatever the council does, so the map has to exist before the first
+  /// angle is seated. Decision 0005 recorded that as a bound on first-round
+  /// breadth; it was a missing seat.
+  static const int openingMapRound = 0;
+
   /// Called with the session as it stands every time a round closes, and once
   /// more when the manifest is closed.
   ///
@@ -200,6 +224,14 @@ class CouncilRun {
       quiet++;
     }
 
+    // The territory is described before anyone searches it. The cartographer
+    // works from the brief and the medium, which is all it needs — the map
+    // says what ground the idea covers, not what the council has found on it.
+    if (_session.rounds.isEmpty) {
+      await _mapTerritory(round: openingMapRound, profile: profile);
+      await onBarrier?.call(_session);
+    }
+
     while (true) {
       final List<String> angleSet = angleSetFor(
         round: round,
@@ -226,7 +258,7 @@ class CouncilRun {
       ]);
 
       final List<String> gapsNamed = <String>[];
-      if (round % template.roundsPerBarrier == 0) {
+      if (mapsAfterRound(round, template)) {
         gapsNamed.addAll(await _mapTerritory(round: round, profile: profile));
       }
 
@@ -748,13 +780,18 @@ class CouncilRun {
               replyChars: reply.text.length,
               tokensIn: reply.tokensIn,
               tokensOut: reply.tokensOut,
+              cacheCreationTokens: reply.cacheCreationTokens,
+              cacheReadTokens: reply.cacheReadTokens,
             ),
           ),
         );
+        final int cached = reply.cacheCreationTokens + reply.cacheReadTokens;
         _emit(
           'turn',
           '${turn.purpose} by ${turn.agent.id}'
-              '${reply.tokensIn == 0 && reply.tokensOut == 0 ? '' : ' · ${reply.tokensIn} in, ${reply.tokensOut} out'}',
+              '${reply.tokensIn + cached + reply.tokensOut == 0 ? '' : ' · ${reply.tokensIn} fresh'
+                        '${cached == 0 ? '' : ', $cached cached'}'
+                        ', ${reply.tokensOut} out'}',
           round: turn.agent.round,
         );
         return reply;

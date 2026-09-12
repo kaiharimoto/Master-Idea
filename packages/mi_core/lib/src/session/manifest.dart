@@ -18,6 +18,8 @@ class ModelCall {
     required this.replyChars,
     this.tokensIn = 0,
     this.tokensOut = 0,
+    this.cacheCreationTokens = 0,
+    this.cacheReadTokens = 0,
   });
 
   final DateTime at;
@@ -34,8 +36,20 @@ class ModelCall {
 
   /// Zero when the transport does not report usage. Recorded as zero rather
   /// than omitted, so 'not reported' and 'nothing spent' stay distinguishable.
+  ///
+  /// [tokensIn] is **fresh** input only. Everything the provider served out of
+  /// its cache is below, because the three are priced differently and a sum
+  /// cannot be taken apart again.
   final int tokensIn;
   final int tokensOut;
+  final int cacheCreationTokens;
+  final int cacheReadTokens;
+
+  /// Every input token handed over, however it was priced.
+  ///
+  /// Not a cost. This record multiplies nothing by a rate that changes without
+  /// warning; it counts what was sent.
+  int get inputAllIn => tokensIn + cacheCreationTokens + cacheReadTokens;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'at': at.toIso8601String(),
@@ -45,6 +59,8 @@ class ModelCall {
     'replyChars': replyChars,
     'tokensIn': tokensIn,
     'tokensOut': tokensOut,
+    'cacheCreationTokens': cacheCreationTokens,
+    'cacheReadTokens': cacheReadTokens,
   };
 
   static ModelCall fromJson(Map<String, Object?> j) => ModelCall(
@@ -55,6 +71,10 @@ class ModelCall {
     replyChars: (j['replyChars']! as num).toInt(),
     tokensIn: (j['tokensIn'] as num?)?.toInt() ?? 0,
     tokensOut: (j['tokensOut'] as num?)?.toInt() ?? 0,
+    // A session written before cached input was measured reads as zero, which
+    // is the truth about it: nothing counted them.
+    cacheCreationTokens: (j['cacheCreationTokens'] as num?)?.toInt() ?? 0,
+    cacheReadTokens: (j['cacheReadTokens'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -195,13 +215,35 @@ class RunManifest {
   /// Calls made between two instants — one round's worth, when handed a
   /// round's ends. The manifest is flat on purpose, so this is how a round is
   /// costed after the fact.
-  int callsBetween(DateTime from, DateTime until) => calls
+  List<ModelCall> callsIn(DateTime from, DateTime until) => calls
       .where((ModelCall c) => !c.at.isBefore(from) && !c.at.isAfter(until))
-      .length;
+      .toList();
+
+  /// How many, for the places that only need the count.
+  int callsBetween(DateTime from, DateTime until) =>
+      callsIn(from, until).length;
 
   int get tokensIn => calls.fold(0, (int sum, ModelCall c) => sum + c.tokensIn);
   int get tokensOut =>
       calls.fold(0, (int sum, ModelCall c) => sum + c.tokensOut);
+  int get cacheCreationTokens =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.cacheCreationTokens);
+  int get cacheReadTokens =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.cacheReadTokens);
+
+  /// Every input token this run handed over, cached or fresh.
+  int get inputAllIn =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.inputAllIn);
+
+  /// Prompt and reply sizes, measured locally rather than reported.
+  ///
+  /// The cross-check on the provider's own figures: a manifest claiming two
+  /// input tokens against a prompt of nine thousand characters is not
+  /// reporting a cheap call, it is reporting the wrong field.
+  int get promptChars =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.promptChars);
+  int get replyChars =>
+      calls.fold(0, (int sum, ModelCall c) => sum + c.replyChars);
 
   RunManifest record(ModelCall c) => _copy(calls: <ModelCall>[...calls, c]);
 
@@ -251,6 +293,8 @@ class RunManifest {
     'councilTimeSeconds': councilTime.inSeconds,
     'tokensIn': tokensIn,
     'tokensOut': tokensOut,
+    'cacheCreationTokens': cacheCreationTokens,
+    'cacheReadTokens': cacheReadTokens,
     'calls': calls.map((ModelCall c) => c.toJson()).toList(),
     'pauses': pauses.map((LimitPause p) => p.toJson()).toList(),
     'holds': holds.map((Hold h) => h.toJson()).toList(),

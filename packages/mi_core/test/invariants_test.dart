@@ -10,6 +10,30 @@ Future<Session> goodSession() => CouncilRun(
 ).deliberate(referenceSession());
 
 void main() {
+  group('the map is what lets an assize trace what it found', () {
+    test(
+      'a run at the largest tier leaves no shared-answer findings',
+      () async {
+        final Session done = await CouncilRun(
+          transport: ScriptedCouncil(),
+          clock: FakeClock(),
+        ).deliberate(referenceSession(templateId: 'assize'));
+
+        expect(
+          InvariantSuite.run(done).forInvariant(Invariant.traceability),
+          isEmpty,
+          reason:
+              'The blind spot was the first rounds of a tier whose barrier is '
+              'three. The run cannot refuse a shared answer while a round is '
+              'open — it is a property of the whole kept set, and the accept '
+              'path may not wait on one — so the suite found afterwards what '
+              'nothing could prevent during. Drawing the map at round one '
+              'removes the condition instead of checking for it.',
+        );
+      },
+    );
+  });
+
   group('a session the council actually ran', () {
     test('holds all three invariants', () async {
       final Session s = await goodSession();

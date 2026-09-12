@@ -13,6 +13,7 @@
 /// touch it.
 library;
 
+export 'src/charts.dart';
 export 'src/dialogs.dart';
 export 'src/keyboard.dart';
 export 'src/theme.dart';

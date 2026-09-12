@@ -127,6 +127,44 @@ with 1: ` with nothing after the colon — a limit that lifts recorded as a
 failure that never does. `CliCouncil` reads both streams; the fake council
 reports a limit both ways, and a test holds each.
 
+**The ground is mapped before it is searched, in round zero.** A gap may only
+be cited by a direction from a *later* round than the one that wrote it, so a
+map drawn at the end of round one can never source a round-one direction — and
+round one at an assize puts forward forty-eight directions against sixteen
+interview answers, which no council can tell apart. `CouncilRun.deliberate`
+seats the cartographer before the loop, from the brief alone. Decision 0005
+called that a bound on first-round breadth; it was a missing call. Decision
+0022.
+
+**Usage is on `message.usage` and on the result event, never at the root of an
+assistant event.** Reading the root matched only the result event's *uncached
+remainder* — two input tokens against a nine-thousand-character prompt, for a
+whole assize. The result event's roll-up wins; assistant usage keyed by message
+id is the fallback. `cache_creation_input_tokens` and `cache_read_input_tokens`
+are their own fields and are never summed into `tokensIn`, because the three
+are priced differently and a sum cannot be unfolded. The result event also
+repeats the final message, so its text is taken *instead of* the assistant
+events' and never as well.
+
+**A double whose shape is invented tests the code against the double.** The
+fake council put usage where nothing real puts it and the only assertion was
+`tokensOut > 0`, which is why the suite was green through a run that measured
+nothing. When a transport reads a wire format, the fake must emit the format.
+
+**The sitting screen reads the stored rounds, never the run's events.** Events
+are memory: `Sitting.begin` clears them and a restart throws them away, which
+is how a client came back to ninety-six directions and twelve hundred model
+calls under the words "Nothing yet". `RoundAccount` is pure over a stored round
+plus the manifest and is read by both the screen and the coverage ledger, so an
+export and a live screen cannot disagree about the same round.
+
+**Nothing on any screen may show a fraction of the run.** The arc of what each
+round kept is the progress, because two consecutive rounds keeping nothing is
+what ends a sitting. `LowerBounds` says only floors — when the ground is next
+mapped, and the round before which this cannot end — and `CouncilRun` may not
+so much as mention it, which a test enforces by reading the source. A round's
+angle fan-in is the one honest denominator in the program.
+
 **A pause is a gate in the run, never a kill in the transport.**
 `CouncilRun.hold()` stops new turns reaching the transport and lets the ones
 already out finish; `release()` continues the round where it was. It is not a
@@ -211,12 +249,22 @@ repository, reads its real file and compares. On CI it never is, so the
 literals are what actually run — a memory of the numbers, and worth knowing
 that is what it is.
 
+**Charts carry no meaning in colour, and add none.** The four primitives in
+`mi_design/lib/src/charts.dart` use only existing tokens; identity is position
+plus a written label on every mark, which is what makes them readable under any
+colour vision. The one ramp — `ink`, `inkMuted`, `inkFaint` — was measured, not
+chosen: a fourth neutral step is a border token at 1.54:1 against the surface,
+a segment nobody can see, which is why a round's funnel is four bars on a
+shared scale rather than one stacked bar.
+
 **One colour is added, and exactly one widget may touch it.**
 `MiColors.verdict` is oxblood, for verdicts and ratings and nothing else — a
 council's entire output is judgement, and a dossier that sets its ratings in
 the same ink as its prose is one you have to read twice to find them in.
 `MiVerdict` is the only widget that reaches it, and the test reads the source
-to prove nothing else does. Material is handed *ink* as its `primary` for the
+of *every* file in `lib/src` to prove nothing else does — it watched one file
+until charts arrived, and a rule that only watches where it was born stops
+being a rule the moment a second place can break it. Material is handed *ink* as its `primary` for the
 same reason: a stock widget reaching for `primary` would otherwise paint
 something verdict-coloured that is not a verdict.
 
@@ -302,3 +350,11 @@ hand is the point.
 The user tests real builds and reports in chat. Fix breakage, crashes and
 obvious bugs directly; discuss anything that changes behaviour or appearance
 first. Keep `docs/STATUS.md` current as part of the change.
+
+**Work lands on `main`.** There was no trunk for a while — three parallel
+`claude/*` branches, with the default pointing at one that was fifteen commits
+behind the build the user was actually running, which is why nothing lined up.
+Every green push to `main` republishes the rolling `dev` release, so the way to
+get a change in front of the user is to land it and let CI build it. `ci.yml`
+publishes from `main`, from the default branch and from any `claude/*` branch,
+so a development branch still produces an installable build when one is wanted.

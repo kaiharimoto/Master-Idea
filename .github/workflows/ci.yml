@@ -337,9 +337,14 @@ jobs:
     # built green and published nothing, while the release page users are told
     # to bookmark kept serving a build from weeks ago — and an installed copy
     # that stops seeing updates says nothing about it. See decision 0013.
+    # `main` is named outright as well as by the default-branch expression, so
+    # that publishing does not wait on anybody remembering to move the default
+    # pointer in the repository settings. The two overlap harmlessly once it
+    # has been moved.
     if: >-
       github.event_name != 'pull_request' &&
-      (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+      (github.ref == 'refs/heads/main' ||
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
        startsWith(github.ref, 'refs/heads/claude/'))
     runs-on: ubuntu-latest
     permissions:

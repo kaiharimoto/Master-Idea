@@ -13,7 +13,10 @@
 // with `is_error` set and `"Claude AI usage limit reached|<epoch>"` as the
 // result, exit code 1, and nothing at all on stderr. `MI_FAKE_MUTE_EXIT=1`
 // exits 1 having said nothing on either stream, which a real one does when it
-// is killed by something outside it.
+// is killed by something outside it. `MI_FAKE_TOOL_LOOP=1` reports one message
+// twice and then a second, the way a turn that used a tool does, so a
+// transport that double counts can be caught. `MI_FAKE_NO_RESULT=1` stops
+// after the assistant events, as a truncated stream does.
 import 'dart:convert';
 import 'dart:io';
 
@@ -202,22 +205,76 @@ Future<void> main(List<String> args) async {
       // without --verbose, which presents as a hang.
       exit(0);
     }
+    // The real shape, and the reason it matters. Usage lives inside `message`
+    // on an assistant event and at the root of the `result` event — never at
+    // the root of an assistant event, which is where this fake used to put it
+    // and where the transport used to look. `input_tokens` is deliberately
+    // tiny, the way a real caching CLI reports it: a test asserting only that
+    // it is non-zero would pass while the prompt went uncounted, so the cache
+    // fields are what actually hold the fix.
+    Map<String, Object?> usage(int promptChars, int replyChars) =>
+        <String, Object?>{
+          'input_tokens': 4,
+          'cache_creation_input_tokens': promptChars ~/ 4,
+          'cache_read_input_tokens': promptChars ~/ 8,
+          'output_tokens': replyChars ~/ 4,
+        };
+
+    void assistant(String id, String text, Map<String, Object?> u) {
+      stdout.writeln(
+        jsonEncode(<String, Object?>{
+          'type': 'assistant',
+          'message': <String, Object?>{
+            'id': id,
+            'role': 'assistant',
+            'content': <Object?>[
+              <String, Object?>{'type': 'text', 'text': text},
+            ],
+            'usage': u,
+          },
+          'session_id': 'fake-session',
+        }),
+      );
+    }
+
+    // A tool loop: one message reported twice, then a second message. Only a
+    // transport that keys by message id and prefers the roll-up gets this
+    // right; one that adds every event counts the first message twice.
+    if (Platform.environment['MI_FAKE_TOOL_LOOP'] == '1') {
+      final Map<String, Object?> first = usage(prompt.length, 0);
+      assistant('msg_a', '', first);
+      assistant('msg_a', '', first);
+      assistant('msg_b', body, usage(0, body.length));
+      stdout.writeln(
+        jsonEncode(<String, Object?>{
+          'type': 'result',
+          'subtype': 'success',
+          'is_error': false,
+          'result': body,
+          'usage': usage(prompt.length, body.length),
+          'total_cost_usd': 0,
+        }),
+      );
+      exit(0);
+    }
+
+    assistant('msg_fake_$pid', body, usage(prompt.length, body.length));
+
+    // A stream cut off after the answer and before the roll-up. What it cost
+    // is still what it cost, and recording zero would make a real spend look
+    // like a transport that measures nothing.
+    if (Platform.environment['MI_FAKE_NO_RESULT'] == '1') exit(0);
+
     stdout.writeln(
       jsonEncode(<String, Object?>{
-        'type': 'assistant',
-        'message': <String, Object?>{
-          'content': <Object?>[
-            <String, Object?>{'type': 'text', 'text': body},
-          ],
-        },
-        'usage': <String, Object?>{
-          'input_tokens': prompt.length ~/ 4,
-          'output_tokens': body.length ~/ 4,
-        },
+        'type': 'result',
+        'subtype': 'success',
+        'is_error': false,
+        // The real one repeats the whole final message here.
+        'result': body,
+        'usage': usage(prompt.length, body.length),
+        'total_cost_usd': 0,
       }),
-    );
-    stdout.writeln(
-      jsonEncode(<String, Object?>{'type': 'result', 'subtype': 'success'}),
     );
   } else {
     stdout.write(body);
@@ -244,6 +301,16 @@ String _answer(String prompt) {
         'end';
   }
   if (prompt.contains('You are the cartographer')) {
+    // Numbered, because the prospector below needs to know how many maps have
+    // been drawn and the prompt does not carry a round. The cartographer runs
+    // after every angle has returned, never beside them, so a counter file
+    // here cannot race the way one in a propose turn would.
+    final File drawn = File('.maps');
+    final int n =
+        (int.tryParse(drawn.existsSync() ? drawn.readAsStringSync() : '0') ??
+            0) +
+        1;
+    drawn.writeAsStringSync('$n', flush: true);
     return 'mi-territory\n'
         'id=t-fake-explored\n'
         'name=Ground already walked\n'
@@ -258,7 +325,7 @@ String _answer(String prompt) {
         'reason=The client put it out of bounds in the interview.\n'
         'end\n'
         'mi-territory\n'
-        'id=t-fake-gap\n'
+        'id=t-fake-gap-$n\n'
         'name=Ground nobody has entered\n'
         'description=Still open.\n'
         'status=gap\n'
@@ -269,9 +336,14 @@ String _answer(String prompt) {
         'becomes=One proceeding rather than a pile of options.\n'
         'end';
   }
-  // A prospector. Answer once and then go quiet, so a run driven by this
-  // binary reaches dryness instead of running forever.
-  if (prompt.contains('OPEN GAPS IN THE MAP')) return 'mi-none';
+  // A prospector. Answer while the map is young and then go quiet, so a run
+  // driven by this binary reaches dryness instead of running forever.
+  //
+  // Keyed off how many maps have been drawn rather than off the gaps section
+  // existing at all: the cartographer now describes the ground *before* the
+  // first angle is seated, so every propose prompt carries open gaps and a
+  // fake that fell silent at the sight of them would answer nothing, ever.
+  if (prompt.contains('t-fake-gap-2')) return 'mi-none';
   return 'mi-direction\n'
       'cluster=What the thing is for\n'
       'ambition=reckless\n'

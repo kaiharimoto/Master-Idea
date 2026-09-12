@@ -3,6 +3,7 @@ import '../session/manifest.dart';
 import '../session/round.dart';
 import '../session/session.dart';
 import 'document.dart';
+import 'round_account.dart';
 
 /// The completeness map, rendered so it can be read in about thirty seconds.
 ///
@@ -172,8 +173,8 @@ abstract final class LedgerRenderer {
       ..add(
         DocBlock(
           BlockKind.field,
-          '${_spell(m.councilTime)} of council time'
-          '${m.pauses.isEmpty ? '' : ', inside ${_spell(m.wallClock)} of wall clock'}',
+          '${spellDuration(m.councilTime)} of council time'
+          '${m.pauses.isEmpty ? '' : ', inside ${spellDuration(m.wallClock)} of wall clock'}',
           label: 'Time',
         ),
       )
@@ -193,7 +194,7 @@ abstract final class LedgerRenderer {
       b.add(
         DocBlock(
           BlockKind.item,
-          'Paused ${_spell(p.length)} on a ${p.kind} limit, resuming at a time '
+          'Paused ${spellDuration(p.length)} on a ${p.kind} limit, resuming at a time '
           'that was ${p.source}. Excluded from council time.',
         ),
       );
@@ -202,46 +203,64 @@ abstract final class LedgerRenderer {
       b.add(
         DocBlock(
           BlockKind.item,
-          'Held ${_spell(h.length)} by the client. Nothing new was sent while '
+          'Held ${spellDuration(h.length)} by the client. Nothing new was sent while '
           'it stood, and the round it interrupted was completed after. '
           'Excluded from council time.',
         ),
       );
     }
 
-    // What each round actually yielded, which is the difference between a
-    // round that searched and a round that repeated itself.
-    for (final RoundRecord r in s.rounds) {
-      final int proposed = r.returns.fold(
-        0,
-        (int n, AngleReturn a) => n + a.proposedIds.length,
-      );
-      final int exhausted = r.returns
-          .where((AngleReturn a) => a.exhausted)
-          .length;
+    // What each round actually did, read from the same account the client's
+    // own screen reads. Two implementations of one funnel drift, and an
+    // exported record disagreeing with a live screen about the same round is
+    // worse than either of them being absent.
+    for (final RoundAccount a in RoundAccount.forSession(s)) {
+      b
+        ..add(DocBlock(BlockKind.subheading, 'Round ${a.number}'))
+        ..add(
+          DocBlock(
+            BlockKind.field,
+            a.angleNames.join(' · '),
+            label: 'Angles seated',
+          ),
+        )
+        ..add(DocBlock(BlockKind.field, a.attendance, label: 'Came back'))
+        ..add(DocBlock(BlockKind.field, a.funnel, label: 'Yield'))
+        ..add(
+          DocBlock(
+            BlockKind.field,
+            a.drewTheMap
+                ? '${a.gapsNamed} named at this barrier'
+                : 'the cartographer did not sit this round',
+            label: 'Gaps',
+          ),
+        )
+        ..add(
+          DocBlock(
+            BlockKind.field,
+            '${a.calls} model calls over ${a.tookInWords}'
+            '${a.inputAllIn == 0 ? '' : ', ${a.inputAllIn} tokens in '
+                      'and ${a.tokensOut} out'}',
+            label: 'Cost',
+          ),
+        );
       // Lines nobody could read are named beside the round they were in. An
       // angle that said nothing and an angle whose reply was unreadable are
       // the difference between a run that finished and a run that was ended
       // by a parser, and only one of them is dryness.
-      final int unread = r.returns.fold(
-        0,
-        (int n, AngleReturn a) => n + a.unread.length,
-      );
-      // Costed per round from the manifest's timestamps, because "round three
-      // cost eleven hundred calls" is the figure a client burning through a
-      // limit actually wants, and the manifest is flat.
-      final int calls = m.callsBetween(r.startedAt, r.endedAt);
-      b.add(
-        DocBlock(
-          BlockKind.item,
-          'Round ${r.number}: ${r.breadth} angles, $proposed proposed, '
-          '${r.newDirectionIds.length} kept, ${r.rejections.length} already '
-          'held'
-          '${exhausted == 0 ? '' : ', $exhausted angle(s) exhausted'}'
-          '${unread == 0 ? '' : ', $unread line(s) unreadable'}'
-          '${calls == 0 ? '' : ', $calls model calls'}.',
-        ),
-      );
+      if (a.unreadLines > 0) {
+        b.add(
+          DocBlock(
+            BlockKind.field,
+            '${a.unreadLines} — an angle answering unreadably is the one '
+            'thing that can counterfeit dryness',
+            label: 'Unreadable lines',
+          ),
+        );
+      }
+      for (final AngleAccount x in a.angles) {
+        b.add(DocBlock(BlockKind.item, x.line));
+      }
     }
 
     final List<String> thin = s.clustersNotSpanning;
@@ -270,13 +289,4 @@ abstract final class LedgerRenderer {
 
   /// Durations as words. A number of seconds is a measurement; this is a
   /// document.
-  static String _spell(Duration d) {
-    if (d.inMinutes < 1) return 'under a minute';
-    if (d.inHours < 1) return '${d.inMinutes} minutes';
-    final int hours = d.inHours;
-    final int minutes = d.inMinutes % 60;
-    return minutes == 0
-        ? '$hours hour${hours == 1 ? '' : 's'}'
-        : '$hours hour${hours == 1 ? '' : 's'} $minutes minutes';
-  }
 }

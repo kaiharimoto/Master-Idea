@@ -3,10 +3,11 @@
 Where the build actually is. Kept current as part of every change, because it
 is the only thing that tells the next session where we were.
 
-**Last updated:** the session after the first real sittings, which found the
-transport reading the wrong stream for the CLI's own failures, gave the client
-a pause, and made the sitting screen say what the council is doing and what it
-is costing. Decision 0021.
+**Last updated:** the session that drew the sitting. A client came back to an
+assize and read "What the council has been doing: Nothing yet" over ninety-six
+directions and twelve hundred model calls. Decision 0022: the ground is mapped
+before it is searched, usage is read from the key the CLI actually writes, and
+the screen reads the rounds on disk instead of a list it throws away.
 
 ## Done
 
@@ -114,6 +115,48 @@ shape of them belongs where the next session will look.
   constants. The ledger costs each round in calls. The diagnostic log carries
   the shape of the sitting and every round, pause, hold and stop.
 
+## What the sitting screen shows now
+
+Drawn rather than listed, because counts that do not move are how a running
+council looks like a hung one.
+
+- **A hero figure** — directions held, with verdicts, calls and tokens under it.
+- **What each round kept**, as columns. A sitting ends when two rounds in a row
+  keep nothing, so the approach to zero *is* the progress and it can be shown
+  without predicting anything. There is no percentage anywhere and there never
+  may be: decision 0003, and a test walks every text node on the screen to hold
+  it.
+- **The round under way** — angles back against the breadth seated, which is the
+  one honest denominator in the program, and what is out with the council right
+  now named by what it is doing.
+- **Where the thinking has gone** — clusters by weight, and the ground entered,
+  left aside and still open.
+- **Kept most recently**, by title. A counter climbing says the machine is
+  running; the titles say what it is running toward.
+- **The audit as it stands**, recomputed at every barrier, each invariant
+  separately, with run-until-dry reading "decided when the sitting ends" rather
+  than failing every second of a live run.
+- **Round by round**, from the stored rounds, with each round's funnel.
+
+## The three fixes underneath it
+
+- **The ground is mapped before the first angle is seated.** The cartographer
+  ran every `roundsPerBarrier` rounds, so an assize searched two rounds with no
+  map and every direction in them could cite nothing but an interview answer —
+  ninety-six over sixteen, all accepted during the round and rejected by the
+  suite afterwards. Mapping at the *end* of round one does not fix it: a gap may
+  only be cited from a later round than the one that wrote it. The map is drawn
+  in round zero, from the brief alone.
+- **Usage is read from the key the CLI writes.** It was read from the root of
+  every event, which matched only the result event's uncached remainder: two
+  input tokens per call against nine-thousand-character prompts. Cached input is
+  counted now and kept in its own fields, because a cache read is not priced
+  like fresh input and a sum cannot be unfolded. The fake emitted an invented
+  shape, which is why a whole assize ran green.
+- **The screen reads the stored rounds.** `RoundAccount` is pure over a stored
+  round and the manifest, and the coverage ledger reads the same one, so an
+  export and a live screen cannot disagree about a round.
+
 ## The seam to Master Prompt
 
 Done and tested from both sides. A finished session exports `pitch.md`; pasting
@@ -180,10 +223,15 @@ Two things are worth doing with a real device in hand rather than in a test:
 
 ## Known gaps to watch
 
-- First-round breadth is bounded by the number of interview answers, because a
-  first-round direction has no map to distinguish it from its neighbours. Real
-  runs at the largest tier will need the cartographer naming gaps generously.
-  Recorded in decision 0005.
+- **First-round breadth was never bounded by the number of interview answers.**
+  Decision 0005 recorded that as a real constraint on the tool; it was a missing
+  cartographer call, and it cost an assize — forty-eight first-round directions
+  over sixteen answers, all rejected by the suite after the calls were paid for.
+  The ground is mapped in round zero now, so a first-round direction has gaps to
+  cite like any other. What stands from 0005 is the rule itself: a map that
+  names one gap a barrier cannot tell two directions apart, and a run whose map
+  is thin will fail its own invariant rather than quietly produce directions
+  nobody can distinguish. Superseded by decision 0022.
 - The dedup threshold (`jaccard-substance-v1@0.62`) has been exercised only
   against scripted councils. The first real session is the first honest test of
   whether it is lax or strict, and changing it means a new rule id rather than

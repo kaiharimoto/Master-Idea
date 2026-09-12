@@ -188,6 +188,75 @@ void main() {
     );
   });
 
+  group('the cartographer describes the ground before it is searched', () {
+    test('the map exists before the first angle is seated', () {
+      for (final HarnessTemplate t in harnessTemplates) {
+        expect(
+          CouncilRun.mapsAfterRound(1, t),
+          isTrue,
+          reason:
+              'A tier whose barrier is three ran its first two rounds with no '
+              'map, so every direction found in them could cite nothing but '
+              'an interview answer — and two sharing an answer must each name '
+              'a gap of their own, which no mapless round can give them. The '
+              'run accepted them and the suite rejected them, with the calls '
+              'already paid for.',
+        );
+      }
+    });
+
+    test('an assize names gaps in its first round', () async {
+      final Session done = await CouncilRun(
+        transport: ScriptedCouncil(),
+        clock: FakeClock(),
+      ).deliberate(referenceSession(templateId: 'assize'));
+
+      expect(
+        done.rounds.first.gapsNamed,
+        isNotEmpty,
+        reason:
+            'The map existing from round two onward is the whole point of '
+            'drawing it at round one.',
+      );
+    });
+
+    test('the extra seat costs exactly one call and ends nothing', () async {
+      final ScriptedCouncil council = ScriptedCouncil();
+      final Session done = await CouncilRun(
+        transport: council,
+        clock: FakeClock(),
+      ).deliberate(referenceSession(templateId: 'assize'));
+
+      final int mapped = done.manifest.calls
+          .where((ModelCall c) => c.purpose == 'map')
+          .length;
+      final int shouldMap =
+          1 +
+          done.rounds
+              .where(
+                (RoundRecord r) =>
+                    CouncilRun.mapsAfterRound(r.number, done.template),
+              )
+              .length;
+
+      expect(
+        mapped,
+        shouldMap,
+        reason:
+            'The opening map plus one per barrier. A change to when a seat '
+            'sits must show up in the call count rather than be inferred from '
+            'the schedule that was meant to produce it.',
+      );
+      expect(
+        done.manifest.dryness,
+        isNotNull,
+        reason:
+            'Filling one more seat before a round closes must not reach the '
+            'only decision that can end a run.',
+      );
+    });
+  });
+
   group('a hold is the client waiting, never the council stopping', () {
     test(
       'nothing new is sent while held, and the run continues whole after',
@@ -381,11 +450,14 @@ void main() {
 
       expect(
         stored,
-        <int>[1, 2, 3, 4, 4],
+        <int>[0, 1, 2, 3, 4, 4],
         reason:
             'A round is stored when it closes, and the dryness decision once '
             'more at the end — a run saved only when it finishes is a run '
-            'that loses six hours to a power cut.',
+            'that loses six hours to a power cut. The leading zero is the '
+            'opening map, stored before any angle is seated: a sitting killed '
+            'during its first round would otherwise pay the cartographer '
+            'again on the way back.',
       );
       expect(done.rounds, hasLength(4));
     });
@@ -429,9 +501,19 @@ void main() {
             'loses every search and then records itself as having gone dry.',
       );
       expect(
-        run.sessionSoFar!.ledger.dropped,
+        run.sessionSoFar!.rounds,
         isEmpty,
-        reason: 'Nothing was deliberately left: the council never got to look.',
+        reason:
+            'The failure landed inside the first round, and a round that '
+            'never closed is not a round: what it found is lost with it, '
+            'which is why the sitting resumes from the barrier it reached.',
+      );
+      expect(
+        run.sessionSoFar!.ledger.territories,
+        isNotEmpty,
+        reason:
+            'The opening map was drawn and paid for before the failure. '
+            'Losing it would make the resumed sitting buy the same map twice.',
       );
     });
 

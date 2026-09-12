@@ -21,6 +21,7 @@ export 'src/pitch/pitch_prompt.dart';
 export 'src/render/document.dart';
 export 'src/render/dossier.dart';
 export 'src/render/ledger_view.dart';
+export 'src/render/round_account.dart';
 export 'src/run/council_prompts.dart';
 export 'src/run/council_run.dart';
 export 'src/run/council_turn.dart';

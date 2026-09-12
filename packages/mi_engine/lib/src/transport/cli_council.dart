@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
 import 'package:mi_core/mi_core.dart';
 
 import '../cli/claude_cli.dart';
@@ -308,10 +309,29 @@ class CliCouncil implements CouncilTransport {
   }
 
   /// Pull the assistant's text and its usage out of whatever the build wrote.
+  ///
+  /// **Usage is on the `result` event and inside `message` on the assistant
+  /// events — never at the root of an assistant event.** The first version of
+  /// this read `decoded['usage']` at the root and accumulated it over every
+  /// line, which against the real CLI matched only the result event's
+  /// `input_tokens`: the *uncached remainder*, two tokens on a call whose
+  /// prompt ran to nine thousand characters. A whole assize was recorded at
+  /// two input tokens a call and nobody could tell, because the only fake
+  /// emitting this shape put usage where nothing real puts it.
+  ///
+  /// So: the result event's usage is the turn's own roll-up and wins when it
+  /// is there; the assistant events are the fallback for a stream cut off
+  /// before the roll-up arrives. Two accumulators rather than one, because a
+  /// build that emits both would otherwise count the same tokens twice.
   static CouncilReply _read(String stdout) {
-    final StringBuffer text = StringBuffer();
-    int tokensIn = 0;
-    int tokensOut = 0;
+    final StringBuffer assistantText = StringBuffer();
+    String? resultText;
+    _Usage? rollUp;
+    // Keyed by message id and overwritten rather than added: one assistant
+    // message can be reported more than once across a turn, and adding every
+    // report counts it every time.
+    final Map<String, _Usage> perMessage = <String, _Usage>{};
+    int anon = 0;
     bool sawJson = false;
 
     for (final String line in stdout.split('\n')) {
@@ -325,35 +345,88 @@ class CliCouncil implements CouncilTransport {
       }
       if (decoded is! Map<String, Object?>) continue;
       sawJson = true;
-      final Object? usage = decoded['usage'];
-      if (usage is Map<String, Object?>) {
-        tokensIn += (usage['input_tokens'] as num?)?.toInt() ?? 0;
-        tokensOut += (usage['output_tokens'] as num?)?.toInt() ?? 0;
-      }
+
       final Object? message = decoded['message'];
       if (message is Map<String, Object?>) {
         final Object? content = message['content'];
         if (content is List<Object?>) {
           for (final Object? part in content) {
             if (part is Map<String, Object?> && part['type'] == 'text') {
-              text.writeln('${part['text']}');
+              assistantText.writeln('${part['text']}');
             }
           }
         }
+        final _Usage? u = _Usage.from(message['usage']);
+        if (u != null) {
+          final Object? id = message['id'];
+          perMessage[id is String && id.isNotEmpty ? id : 'anon-${anon++}'] = u;
+        }
       }
-      final Object? result = decoded['result'];
-      if (result is String && decoded['type'] == 'result') {
-        text.writeln(result);
+
+      if (decoded['type'] == 'result') {
+        final Object? result = decoded['result'];
+        if (result is String) resultText = result;
+        rollUp = _Usage.from(decoded['usage']) ?? rollUp;
       }
     }
+
+    // The result event repeats the final assistant message in full. Taking
+    // both would hand the parser every block twice, and the deduplicator
+    // would then refuse each direction against its own first copy — a round
+    // reporting half its yield as 'already held' against itself.
+    final String text = (resultText != null && resultText.trim().isNotEmpty)
+        ? resultText
+        : assistantText.toString();
+
+    final _Usage usage = rollUp ?? _Usage.sum(perMessage.values);
 
     // A build with no stream-json writes plain text, and a turn is still a
     // turn. Falling back rather than refusing is what keeps an older CLI
     // usable at the cost of usage figures the manifest records as zero.
     return CouncilReply(
-      text: sawJson ? text.toString() : stdout,
-      tokensIn: tokensIn,
-      tokensOut: tokensOut,
+      text: sawJson ? text : stdout,
+      tokensIn: usage.input,
+      tokensOut: usage.output,
+      cacheCreationTokens: usage.cacheCreation,
+      cacheReadTokens: usage.cacheRead,
     );
+  }
+}
+
+/// One `usage` object, with the cached halves the first reader threw away.
+@immutable
+class _Usage {
+  const _Usage({
+    this.input = 0,
+    this.output = 0,
+    this.cacheCreation = 0,
+    this.cacheRead = 0,
+  });
+
+  final int input;
+  final int output;
+  final int cacheCreation;
+  final int cacheRead;
+
+  static _Usage? from(Object? raw) {
+    if (raw is! Map<String, Object?>) return null;
+    int read(String key) => (raw[key] as num?)?.toInt() ?? 0;
+    return _Usage(
+      input: read('input_tokens'),
+      output: read('output_tokens'),
+      cacheCreation: read('cache_creation_input_tokens'),
+      cacheRead: read('cache_read_input_tokens'),
+    );
+  }
+
+  static _Usage sum(Iterable<_Usage> all) {
+    int i = 0, o = 0, cc = 0, cr = 0;
+    for (final _Usage u in all) {
+      i += u.input;
+      o += u.output;
+      cc += u.cacheCreation;
+      cr += u.cacheRead;
+    }
+    return _Usage(input: i, output: o, cacheCreation: cc, cacheRead: cr);
   }
 }

@@ -197,6 +197,19 @@ CouncilRole roleById(String id) => councilRoles.firstWhere(
   orElse: () => throw ArgumentError.value(id, 'id', 'no such council role'),
 );
 
+/// The same, or null.
+///
+/// For the places that only need to *print* the seat a judgement came from. A
+/// session written by another build can name a role this one does not have,
+/// and a lookup that throws while a list of rounds is being built takes the
+/// whole screen down with it — every other session included.
+CouncilRole? roleByIdOrNull(String id) {
+  for (final CouncilRole r in councilRoles) {
+    if (r.id == id) return r;
+  }
+  return null;
+}
+
 /// One agent actually seated in a round.
 ///
 /// The distinction between a role and an instance is what the independent
@@ -251,6 +264,22 @@ class AgentInstance {
 
   /// Parse the written form, `role#round.ordinal`. Used by the invariant suite
   /// when it is handed nothing but a stored session.
+  /// The written form read back, or null.
+  ///
+  /// [parse] throws by design: the invariant suite must know when an id is not
+  /// one this council could have issued. A screen printing who sat in a seat
+  /// does not, and must not fall over because a build it never heard of wrote
+  /// the session.
+  static AgentInstance? parseOrNull(String id) {
+    try {
+      return parse(id);
+    } on FormatException {
+      return null;
+    } on ArgumentError {
+      return null;
+    }
+  }
+
   static AgentInstance parse(String id) {
     final int hash = id.indexOf('#');
     final int dot = id.indexOf('.', hash);

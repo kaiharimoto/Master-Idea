@@ -35,11 +35,30 @@ class CouncilReply {
     required this.text,
     this.tokensIn = 0,
     this.tokensOut = 0,
+    this.cacheCreationTokens = 0,
+    this.cacheReadTokens = 0,
   });
 
   final String text;
+
+  /// Fresh input, uncached — what the provider calls `input_tokens`.
+  ///
+  /// On a CLI that caches aggressively this is the small remainder, not the
+  /// prompt: a real assize reported two of these per call against prompts
+  /// thousands of characters long. The bulk is in the two fields below.
   final int tokensIn;
+
   final int tokensOut;
+
+  /// Input written into the provider's cache this turn, and input served back
+  /// out of it.
+  ///
+  /// Kept apart from [tokensIn] rather than summed into it, because the three
+  /// are not priced alike — a cache read is a fraction of fresh input and a
+  /// write is more than it — and a sum cannot be unfolded afterwards by
+  /// anyone reading the manifest.
+  final int cacheCreationTokens;
+  final int cacheReadTokens;
 }
 
 /// Raised when the provider stops the council rather than the council

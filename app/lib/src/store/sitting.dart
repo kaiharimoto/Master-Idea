@@ -153,6 +153,36 @@ class Sitting extends ChangeNotifier {
   /// The round in progress, as far as it has got.
   RoundProgress? get progress => _progress;
 
+  InvariantReport? _audit;
+  String? _auditOf;
+  int _auditedAfterRounds = -1;
+
+  /// The invariant suite against the session as it stands.
+  ///
+  /// Recomputed once a round rather than once an event. A round is hundreds of
+  /// events and the suite is proportional to directions times ratings, but the
+  /// real reason is not cost: mid-round a direction kept a second ago has not
+  /// been judged yet, and the suite would correctly report it unrated — a
+  /// finding that is not a finding, flashing on screen for the minute it takes
+  /// to rate it. At a barrier every kept direction has been through the whole
+  /// pipeline, so a barrier is the only honest moment to ask.
+  InvariantReport? get audit => _audit;
+
+  /// How many rounds had closed when [audit] was taken.
+  int get auditedAfterRounds => _auditedAfterRounds;
+
+  /// Whether [audit] is the answer for this session at this many rounds.
+  bool auditIsFor(Session s) =>
+      _auditOf == s.id && _auditedAfterRounds == s.rounds.length;
+
+  /// Run the suite over [s] and keep the result.
+  void takeAudit(Session s) {
+    _audit = InvariantSuite.run(s);
+    _auditOf = s.id;
+    _auditedAfterRounds = s.rounds.length;
+    notifyListeners();
+  }
+
   bool get isHeld => _phase == SittingPhase.held;
 
   SittingRoute? _route;
@@ -238,6 +268,10 @@ class Sitting extends ChangeNotifier {
         onBarrier: (Session s) async {
           running = s;
           await library.save(s);
+          // Every barrier, and never between them.
+          _audit = InvariantSuite.run(s);
+          _auditOf = s.id;
+          _auditedAfterRounds = s.rounds.length;
         },
       );
       _run = run;

@@ -6,6 +6,7 @@ import '../store/library.dart';
 import '../store/naming.dart';
 import '../store/sitting.dart';
 import '../widgets/carry_panel.dart';
+import '../widgets/sitting_account.dart';
 
 /// The council, sitting.
 ///
@@ -88,7 +89,6 @@ class RunScreen extends StatelessWidget {
         // moves only at barriers, and a round at the largest tier is an hour
         // in which nothing on a barrier-fed screen would move at all.
         final Session shown = here ? (sitting.live ?? open) : open;
-        final RunManifest m = shown.manifest;
         final RoundProgress? progress = here ? sitting.progress : null;
 
         return SingleChildScrollView(
@@ -122,90 +122,37 @@ class RunScreen extends StatelessWidget {
                   const SizedBox(height: MiSpace.md),
                 ],
 
-                // What has actually accumulated. Counts of things that exist,
-                // never a fraction of a total nobody can know: the sitting
-                // ends when it runs dry, so there is no denominator — and a
-                // progress bar here would be a claim nobody can make.
-                MiPanel(
-                  child: Wrap(
-                    spacing: MiSpace.xxl,
-                    runSpacing: MiSpace.md,
-                    children: <Widget>[
-                      _count(c, 'Rounds closed', '${shown.rounds.length}'),
-                      _count(
-                        c,
-                        'Directions held',
-                        '${shown.directions.length}',
-                      ),
-                      _count(c, 'Verdicts recorded', '${shown.ratings.length}'),
-                      _count(
-                        c,
-                        'Territory mapped',
-                        '${shown.ledger.territories.length}',
-                      ),
-                      _count(c, 'Model calls', _thousands(m.calls.length)),
-                      _count(
-                        c,
-                        'Tokens',
-                        m.calls.isEmpty
-                            ? '0'
-                            : m.tokensIn == 0 && m.tokensOut == 0
-                            ? 'not reported'
-                            : '${_thousands(m.tokensIn)} in · '
-                                  '${_thousands(m.tokensOut)} out',
-                      ),
-                    ],
-                  ),
-                ),
+                // The dashboard, all of it read from the stored session
+                // rather than from the run's event list. The events are
+                // memory: `begin()` clears them and closing the app throws
+                // them away, which is how this screen came to say "Nothing
+                // yet" over ninety-six directions and twelve hundred calls.
+                KeptSoFar(session: shown),
                 const SizedBox(height: MiSpace.md),
 
-                // The round in progress, as far as it has got. Every figure
-                // here is a count of something that has happened; the one
-                // total that is known — the angles seated — is the only one
-                // written as "of".
+                WhatEachRoundKept(session: shown),
+                const SizedBox(height: MiSpace.md),
+
                 if (progress != null) ...<Widget>[
-                  MiPanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          'Round ${progress.round} in progress',
-                          style: MiType.body.copyWith(
-                            color: c.ink,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: MiSpace.sm),
-                        Wrap(
-                          spacing: MiSpace.xxl,
-                          runSpacing: MiSpace.md,
-                          children: <Widget>[
-                            _count(
-                              c,
-                              'Angles back',
-                              '${progress.anglesBack} of ${progress.breadth}'
-                                  '${progress.exhausted == 0 ? '' : ' · ${progress.exhausted} exhausted'}',
-                            ),
-                            _count(
-                              c,
-                              'Kept this round',
-                              '${progress.kept} · ${progress.judged} judged',
-                            ),
-                            _count(
-                              c,
-                              'Calls this round',
-                              _thousands(progress.calls),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: MiSpace.sm),
-                        Text(
-                          _inFlight(sitting.inFlight),
-                          style: MiType.caption.copyWith(color: c.inkMuted),
-                        ),
-                      ],
-                    ),
-                  ),
+                  RoundUnderWay(progress: progress, inFlight: sitting.inFlight),
+                  const SizedBox(height: MiSpace.md),
+                ],
+
+                if (shown.directions.isNotEmpty) ...<Widget>[
+                  WhereTheThinkingHasGone(session: shown),
+                  const SizedBox(height: MiSpace.md),
+                  KeptMostRecently(session: shown),
+                  const SizedBox(height: MiSpace.md),
+                ],
+
+                if (shown.rounds.isNotEmpty) ...<Widget>[
+                  AuditStanding(sitting: sitting, session: shown),
+                  const SizedBox(height: MiSpace.md),
+                  if (shown.manifest.dryness == null) ...<Widget>[
+                    WhatHappensNext(session: shown),
+                    const SizedBox(height: MiSpace.md),
+                  ],
+                  RoundHistory(session: shown),
                   const SizedBox(height: MiSpace.md),
                 ],
 
@@ -378,7 +325,7 @@ class RunScreen extends StatelessWidget {
                     ),
                   ),
                 MiDisclosure(
-                  label: 'What the council has been doing',
+                  label: 'The turn-by-turn log',
                   trailingNote: sitting.events.isEmpty
                       ? null
                       : '${sitting.events.length}',
@@ -387,7 +334,9 @@ class RunScreen extends StatelessWidget {
                     children: <Widget>[
                       if (sitting.events.isEmpty)
                         Text(
-                          'Nothing yet.',
+                          'The log starts when a sitting opens on this '
+                          'device. What the council has already done is '
+                          'above.',
                           style: MiType.caption.copyWith(color: c.inkMuted),
                         ),
                       for (final RunEvent e in sitting.events.reversed.take(40))
@@ -410,42 +359,7 @@ class RunScreen extends StatelessWidget {
     );
   }
 
-  Widget _count(MiColors c, String label, String value) => MiField(
-    label: label,
-    child: Text(value, style: MiType.numeric.copyWith(color: c.ink)),
-  );
-
-  static String _clock(DateTime at) =>
-      '${at.hour.toString().padLeft(2, '0')}:'
-      '${at.minute.toString().padLeft(2, '0')}';
-
-  static String _thousands(int n) {
-    final String s = '$n';
-    final StringBuffer b = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
-      b.write(s[i]);
-    }
-    return b.toString();
-  }
-
   /// What the seats out with the council are doing, in words.
-  static String _inFlight(Map<String, int> flying) {
-    if (flying.isEmpty) return 'Nothing is out with the council right now.';
-    const Map<String, String> doing = <String, String>{
-      'propose': 'proposing',
-      'challenge': 'challenging',
-      'rate': 'rating',
-      'dissent': 'weighing a dissent',
-      'map': 'mapping the territory',
-      'integrate': 'integrating',
-    };
-    final List<String> parts = <String>[
-      for (final MapEntry<String, int> e in flying.entries)
-        '${e.value} ${doing[e.key] ?? e.key}',
-    ];
-    return 'Out with the council now: ${parts.join(', ')}.';
-  }
 
   static String _stillOut(Map<String, int> flying) {
     final int n = flying.values.fold(0, (int a, int b) => a + b);
@@ -464,12 +378,16 @@ class RunScreen extends StatelessWidget {
         '$dims dimensions by a fresh seat each, and every rating is offered a '
         'dissent — ${CouncilRun.callsPerDirection} calls per kept direction, '
         'so a round can run to '
-        '${_thousands(CouncilRun.mostCallsInRound(t.angleBreadth))} calls. '
+        '${thousands(CouncilRun.mostCallsInRound(t.angleBreadth))} calls. '
         'A proposal already held is refused before it is judged, which is why '
         'later rounds cost far less than the first. The sitting ends only '
         'when two consecutive rounds keep nothing new, so it always runs at '
         'least two rounds past its last discovery.';
   }
+
+  static String _clock(DateTime at) =>
+      '${at.hour.toString().padLeft(2, '0')}:'
+      '${at.minute.toString().padLeft(2, '0')}';
 
   String _status(Sitting s, {required bool elsewhere}) {
     if (elsewhere) return 'Sitting elsewhere';

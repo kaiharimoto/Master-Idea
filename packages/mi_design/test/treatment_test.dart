@@ -48,13 +48,19 @@ void main() {
       // second place that reached for oxblood would make the first one mean
       // nothing, so this reads the source and names every class that touches
       // it.
-      final String source = File('lib/src/widgets.dart').readAsStringSync();
-      final List<String> chunks = source.split(
-        RegExp(r'^class ', multiLine: true),
-      );
+      // Every file that draws, not just the one that did when this was
+      // written: charts arrived later, and a rule that only watches the file
+      // it was born in stops being a rule the moment a second one appears.
       final List<String> reaching = <String>[
-        for (final String chunk in chunks.skip(1))
-          if (chunk.contains('c.verdict')) chunk.split(RegExp(r'[ ({]')).first,
+        for (final FileSystemEntity f in Directory('lib/src').listSync())
+          if (f is File && f.path.endsWith('.dart'))
+            for (final String chunk
+                in f
+                    .readAsStringSync()
+                    .split(RegExp(r'^class ', multiLine: true))
+                    .skip(1))
+              if (chunk.contains('c.verdict'))
+                chunk.split(RegExp(r'[ ({]')).first,
       ];
       expect(
         reaching,
